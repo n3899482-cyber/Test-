@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hand VR Sandbox</title>
+<style>
+:root { --cyan:#00ffe7; --orange:#ff6b00; --red:#ff2d55; --bg:#050a0f; }
+*{ margin:0; padding:0; box-sizing:border-box; }
+body{ background:var(--bg); overflow:hidden; font-family:'Courier New',monospace; }
+
+#boot{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:1000;gap:20px;padding:30px;
+}
+#boot h1{ font-size:clamp(24px,6vw,44px);color:var(--cyan);letter-spacing:6px;
+  text-shadow:0 0 30px var(--cyan);animation:pulse 2s ease-in-out infinite; }
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+#boot p{ color:rgba(255,255,255,.5);font-size:13px;letter-spacing:2px;text-align:center;max-width:320px;line-height:1.9; }
+.gestures{ display:flex;flex-direction:column;gap:8px;width:100%;max-width:300px; }
+.g-row{ display:flex;align-items:center;gap:12px;font-size:12px;color:rgba(255,255,255,.55);letter-spacing:1px; }
+.g-ico{ font-size:20px;width:28px;text-align:center; }
+.g-lbl{ color:var(--cyan); }
+#start-btn{
+  background:transparent;border:2px solid var(--cyan);color:var(--cyan);
+  font-size:15px;letter-spacing:4px;padding:15px 44px;border-radius:4px;cursor:pointer;
+  transition:all .3s;margin-top:6px;
+}
+#start-btn:hover{ background:var(--cyan);color:#000; }
+
+#loading{ position:fixed;inset:0;background:rgba(5,10,15,.92);
+  display:none;flex-direction:column;align-items:center;justify-content:center;z-index:500;gap:16px; }
+#loading p{ color:var(--cyan);letter-spacing:3px;font-size:13px; }
+#load-bar-wrap{ width:220px;height:3px;background:rgba(255,255,255,.1);border-radius:2px; }
+#load-bar{ height:100%;background:var(--cyan);border-radius:2px;width:0%;transition:width .3s;box-shadow:0 0 8px var(--cyan); }
+
+#game{ position:fixed;inset:0;display:none; }
+#cam-video{ position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;opacity:.3; }
+#scene-canvas{ position:fixed;inset:0;width:100%;height:100%;z-index:1; }
+#hand-canvas{ position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;transform:scaleX(-1); }
+
+#finger-cursor{
+  position:fixed;z-index:20;pointer-events:none;
+  width:26px;height:26px;margin:-13px 0 0 -13px;
+  border:2px solid var(--cyan);border-radius:50%;
+  box-shadow:0 0 14px var(--cyan),inset 0 0 6px rgba(0,255,231,.3);
+  transition:transform .06s,border-color .15s,box-shadow .15s;display:none;
+}
+#finger-cursor.grab{ border-color:var(--orange);box-shadow:0 0 20px var(--orange);transform:scale(1.5); }
+#finger-cursor.open-hand{ border-color:var(--red);box-shadow:0 0 20px var(--red); }
+
+#hud{
+  position:fixed;top:0;left:0;right:0;z-index:10;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 18px;background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);
+}
+#gesture-display{ font-size:12px;letter-spacing:3px;color:var(--cyan);text-shadow:0 0 10px var(--cyan);min-width:180px; }
+#info-right{ text-align:right; }
+#obj-count{ color:rgba(255,255,255,.35);font-size:10px;letter-spacing:2px; }
+#fps-display{ color:rgba(255,255,255,.25);font-size:10px; }
+
+#panel{
+  position:fixed;right:14px;top:50%;transform:translateY(-50%);
+  z-index:30;flex-direction:column;gap:9px;display:none;
+  background:rgba(0,8,18,.88);border:1px solid rgba(0,255,231,.2);
+  border-radius:16px;padding:14px 10px;backdrop-filter:blur(20px);
+  box-shadow:0 0 40px rgba(0,255,231,.1);
+}
+#panel.open{ display:flex; }
+#panel-title{ color:rgba(255,255,255,.3);font-size:9px;letter-spacing:3px;text-align:center;margin-bottom:4px; }
+.panel-item{
+  width:62px;height:62px;border-radius:12px;border:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;gap:3px;
+}
+.panel-item.hov{ transform:scale(1.12);border-color:var(--cyan);box-shadow:0 0 14px rgba(0,255,231,.3); }
+.panel-item span{ font-size:22px; }
+.panel-item label{ font-size:7px;letter-spacing:1px;color:rgba(255,255,255,.45);cursor:pointer; }
+.panel-progress{
+  position:absolute;bottom:0;left:0;height:3px;background:var(--cyan);border-radius:0 0 0 12px;
+  transition:width .05s;width:0%;
+}
+
+#bottom-bar{
+  position:fixed;bottom:0;left:0;right:0;z-index:10;
+  padding:10px 16px 18px;background:linear-gradient(to top,rgba(0,0,0,.7),transparent);
+  display:flex;justify-content:center;gap:12px;
+}
+.act-btn{
+  background:rgba(0,255,231,.07);border:1px solid rgba(0,255,231,.22);
+  color:var(--cyan);font-size:10px;letter-spacing:2px;padding:9px 18px;
+  border-radius:28px;cursor:pointer;backdrop-filter:blur(8px);transition:all .2s;
+}
+.act-btn:hover{ background:rgba(0,255,231,.18); }
+.act-btn.danger{ border-color:rgba(255,45,85,.3);color:var(--red);background:rgba(255,45,85,.07); }
+
+#gesture-flash{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:clamp(50px,12vw,90px);z-index:50;pointer-events:none;
+  opacity:0;transition:opacity .2s;filter:drop-shadow(0 0 20px rgba(255,255,255,.4));
+}
+
+/* progress ring on selected object */
+#select-ring{
+  position:fixed;z-index:8;pointer-events:none;
+  border:2px solid var(--cyan);border-radius:50%;
+  box-shadow:0 0 12px var(--cyan);display:none;
+  animation:rpulse 1.2s ease-in-out infinite;
+}
+@keyframes rpulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <h1>◈ HAND VR ◈</h1>
+  <p>Керуй 3D предметами своєю рукою через камеру — як у справжньому VR</p>
+  <div class="gestures">
+    <div class="g-row"><span class="g-ico">☝️</span><span><span class="g-lbl">ВКАЗІВНИЙ</span> — навести / вибрати</span></div>
+    <div class="g-row"><span class="g-ico">✌️</span><span><span class="g-lbl">ДВА ПАЛЬЦІ</span> — схопити і рухати</span></div>
+    <div class="g-row"><span class="g-ico">🤏</span><span><span class="g-lbl">ЩИПОК</span> — змінити розмір</span></div>
+    <div class="g-row"><span class="g-ico">✋</span><span><span class="g-lbl">ВІДКРИТА РУКА</span> — панель предметів</span></div>
+    <div class="g-row"><span class="g-ico">👊</span><span><span class="g-lbl">КУЛАК</span> — кинути предмет</span></div>
+  </div>
+  <button id="start-btn" onclick="startGame()">▶ ЗАПУСТИТИ КАМЕРУ</button>
+</div>
+
+<div id="loading">
+  <p>ЗАВАНТАЖЕННЯ MEDIAPIPE...</p>
+  <div id="load-bar-wrap"><div id="load-bar"></div></div>
+</div>
+
+<div id="game">
+  <video id="cam-video" autoplay playsinline muted></video>
+  <canvas id="scene-canvas"></canvas>
+  <canvas id="hand-canvas"></canvas>
+  <div id="finger-cursor"></div>
+  <div id="gesture-flash"></div>
+  <div id="select-ring"></div>
+
+  <div id="hud">
+    <div id="gesture-display">◈ ПОКАЖИ РУКУ</div>
+    <div id="info-right">
+      <div id="obj-count">0 OBJ</div>
+      <div id="fps-display">-- FPS</div>
+    </div>
+  </div>
+
+  <div id="panel"><div id="panel-title">ПРЕДМЕТИ</div></div>
+
+  <div id="bottom-bar">
+    <button class="act-btn" onclick="togglePanel()">✋ ПАНЕЛЬ</button>
+    <button class="act-btn danger" onclick="clearScene()">✕ ОЧИСТИТИ</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  HAND VR SANDBOX — MediaPipe + WebGL
+// ═══════════════════════════════════════════════════════
+const W=()=>window.innerWidth, H=()=>window.innerHeight;
+
+// ── Globals ──
+let objects=[], selectedObj=null, panelOpen=false;
+let handVisible=false, lastLM=null;
+let smoothX=W()/2, smoothY=H()/2;
+let fingerX=W()/2, fingerY=H()/2;
+let gesture='none', prevGesture='none', gestureFrames=0;
+let grabStartX=0,grabStartY=0,grabOX=0,grabOY=0;
+let pinchStart=0,scaleStart=1;
+let throwCooldown=0;
+let panelHoverIdx=-1,panelHoverFrames=0;
+const PANEL_HOLD_FRAMES=28;
+let fcount=0,lastFPSt=0;
+let flashTmr=null;
+
+// ── Catalog ──
+const CATALOG=[
+  {type:'box',     emoji:'📦',label:'КУБ',     col:[.9,.35,.2]},
+  {type:'sphere',  emoji:'🔵',label:'КУЛЯ',    col:[.2,.55,.95]},
+  {type:'cyl',     emoji:'🔷',label:'ЦИЛІН',   col:[.2,.85,.45]},
+  {type:'pyramid', emoji:'🔺',label:'ПІРАМІДА',col:[.95,.78,.1]},
+  {type:'torus',   emoji:'⭕',label:'ТОРОЇД',  col:[.75,.2,.95]},
+  {type:'gem',     emoji:'💎',label:'КРИСТАЛ', col:[.5,.9,1.0]},
+];
+
+// ─────────────────────────────────────────────
+//  WebGL RENDERER
+// ─────────────────────────────────────────────
+const sc=document.getElementById('scene-canvas');
+sc.width=W(); sc.height=H();
+const gl=sc.getContext('webgl',{antialias:true,alpha:true});
+
+const VS=`
+attribute vec3 aP,aN;
+uniform mat4 uMVP,uM;
+varying vec3 vN,vW;
+void main(){vN=(uM*vec4(aN,0)).xyz;vW=(uM*vec4(aP,1)).xyz;gl_Position=uMVP*vec4(aP,1);}
+`;
+const FS=`
+precision mediump float;
+varying vec3 vN,vW;
+uniform vec3 uC;uniform float uS,uT;
+void main(){
+  vec3 L=normalize(vec3(2,4,2)-vW);
+  float d=max(dot(normalize(vN),L),0.)*0.8+0.2;
+  vec3 c=uC*d;
+  if(uS>.5){float p=sin(uT*5.)*.35+.65;c=mix(c,vec3(0,1,.88),.25*p)+vec3(0,1,.88)*.15*p;}
+  gl_FragColor=vec4(c,1);
+}
+`;
+function mk(t,s){const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);return sh;}
+const P=gl.createProgram();
+gl.attachShader(P,mk(gl.VERTEX_SHADER,VS));gl.attachShader(P,mk(gl.FRAGMENT_SHADER,FS));
+gl.linkProgram(P);gl.useProgram(P);
+const aP_=gl.getAttribLocation(P,'aP'),aN_=gl.getAttribLocation(P,'aN');
+const uMVP=gl.getUniformLocation(P,'uMVP'),uM_=gl.getUniformLocation(P,'uM');
+const uC_=gl.getUniformLocation(P,'uC'),uS_=gl.getUniformLocation(P,'uS'),uT_=gl.getUniformLocation(P,'uT');
+
+// Math helpers
+const m4=()=>new Float32Array(16);
+function id(m){m.fill(0);m[0]=m[5]=m[10]=m[15]=1;return m;}
+function mul(a,b){const r=m4();for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[i*4+k]*b[k*4+j];r[i*4+j]=s;}return r;}
+function persp(fov,asp,n,f){const t=1/Math.tan(fov*Math.PI/360),r=m4();r[0]=t/asp;r[5]=t;r[10]=(f+n)/(n-f);r[11]=-1;r[14]=(2*f*n)/(n-f);return r;}
+function trn(m,x,y,z){const r=id(m4());r[12]=x;r[13]=y;r[14]=z;return mul(r,m);}
+function ryM(m,a){const c=Math.cos(a),s=Math.sin(a),r=id(m4());r[0]=c;r[2]=s;r[8]=-s;r[10]=c;return mul(r,m);}
+function rxM(m,a){const c=Math.cos(a),s=Math.sin(a),r=id(m4());r[5]=c;r[6]=-s;r[9]=s;r[10]=c;return mul(r,m);}
+function sclM(m,s){const r=id(m4());r[0]=r[5]=r[10]=s;return mul(r,m);}
+
+// Geometry
+function upload(pos,norm,idx){
+  const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);
+  const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(norm),gl.STATIC_DRAW);
+  const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+  return{pb,nb,ib,count:idx.length};
+}
+function mkBox(sx=.6,sy=.6,sz=.6){
+  const p=[],n=[],idx=[];
+  const F=[[0,0,1],[0,0,-1],[0,1,0],[0,-1,0],[1,0,0],[-1,0,0]];
+  const U=[[0,1,0],[0,1,0],[0,0,-1],[0,0,1],[0,1,0],[0,1,0]];
+  let b=0;F.forEach(([nx,ny,nz],fi)=>{
+    const[ux,uy,uz]=U[fi],vx=ny*uz-nz*uy,vy=nz*ux-nx*uz,vz=nx*uy-ny*ux;
+    for(let i=-1;i<=1;i+=2)for(let j=-1;j<=1;j+=2){p.push((nx+ux*i+vx*j)*sx/2,(ny+uy*i+vy*j)*sy/2,(nz+uz*i+vz*j)*sz/2);n.push(nx,ny,nz);}
+    idx.push(b,b+1,b+2,b+1,b+3,b+2);b+=4;
+  });return upload(p,n,idx);
+}
+function mkSphere(r=.4,s=13){
+  const p=[],n=[],idx=[];
+  for(let y=0;y<=s;y++){const v=y/s,phi=v*Math.PI;for(let x=0;x<=s;x++){const u=x/s,th=u*Math.PI*2,sx=Math.sin(phi)*Math.cos(th),sy=Math.cos(phi),sz=Math.sin(phi)*Math.sin(th);p.push(sx*r,sy*r,sz*r);n.push(sx,sy,sz);}}
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){const a=y*(s+1)+x;idx.push(a,a+1,a+s+1,a+1,a+s+2,a+s+1);}
+  return upload(p,n,idx);
+}
+function mkCyl(r=.27,h=.75,s=13){
+  const p=[],n=[],idx=[];
+  for(let i=0;i<=s;i++){const a=i/s*Math.PI*2,cx=Math.cos(a)*r,cz=Math.sin(a)*r;p.push(cx,-h/2,cz,cx,h/2,cz);n.push(Math.cos(a),0,Math.sin(a),Math.cos(a),0,Math.sin(a));}
+  for(let i=0;i<s;i++){const b=i*2;idx.push(b,b+1,b+2,b+1,b+3,b+2);}
+  return upload(p,n,idx);
+}
+function mkPyramid(){
+  const h=.9,r=.45,s=5,p=[],n=[],idx=[];
+  for(let i=0;i<s;i++){
+    const a0=i/s*Math.PI*2,a1=(i+1)/s*Math.PI*2;
+    const x0=Math.cos(a0)*r,z0=Math.sin(a0)*r,x1=Math.cos(a1)*r,z1=Math.sin(a1)*r;
+    p.push(x0,-h/2,z0,x1,-h/2,z1,0,h/2,0);
+    const nx=z1-z0,nz=-(x1-x0),l=Math.hypot(nx,.5,nz);n.push(nx/l,.5/l,nz/l,nx/l,.5/l,nz/l,nx/l,.5/l,nz/l);
+    const b=i*3;idx.push(b,b+1,b+2);
+  }return upload(p,n,idx);
+}
+function mkTorus(R=.38,r=.14,s=13,rn=22){
+  const p=[],n=[],idx=[];
+  for(let j=0;j<=rn;j++){const phi=j/rn*Math.PI*2;for(let i=0;i<=s;i++){const th=i/s*Math.PI*2,cx=(R+r*Math.cos(th))*Math.cos(phi),cy=r*Math.sin(th),cz=(R+r*Math.cos(th))*Math.sin(phi);p.push(cx,cy,cz);n.push(Math.cos(th)*Math.cos(phi),Math.sin(th),Math.cos(th)*Math.sin(phi));}}
+  for(let j=0;j<rn;j++)for(let i=0;i<s;i++){const a=j*(s+1)+i;idx.push(a,a+1,a+s+1,a+1,a+s+2,a+s+1);}
+  return upload(p,n,idx);
+}
+function mkGem(){
+  const p=[],n=[],idx=[];
+  const top=[0,.65,0],bot=[0,-.5,0];
+  const r1=[[.42,.1,0],[.13,.1,.4],[-.33,.1,.25],[-.33,.1,-.25],[.13,.1,-.4]];
+  const r2=[[.28,-.15,0],[.09,-.15,.26],[-.22,-.15,.17],[-.22,-.15,-.17],[.09,-.15,-.26]];
+  let b=0;
+  function addFace(A,B,C){const ax=B[0]-A[0],ay=B[1]-A[1],az=B[2]-A[2],bx=C[0]-A[0],by=C[1]-A[1],bz=C[2]-A[2];const nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,l=Math.hypot(nx,ny,nz)||1;const nv=[nx/l,ny/l,nz/l];p.push(...A,...B,...C);n.push(...nv,...nv,...nv);idx.push(b,b+1,b+2);b+=3;}
+  for(let i=0;i<5;i++){const ni=(i+1)%5;addFace(top,r1[i],r1[ni]);addFace(r1[i],r2[ni],r1[ni]);addFace(r1[i],r2[i],r2[ni]);addFace(r2[i],bot,r2[ni]);}
+  return upload(p,n,idx);
+}
+const MESH={box:mkBox(),sphere:mkSphere(),cyl:mkCyl(),pyramid:mkPyramid(),torus:mkTorus(),gem:mkGem()};
+
+function drawObject(obj,t){
+  let M=id(m4());M=trn(M,obj.x,obj.y,obj.z);M=ryM(M,obj.ry);M=rxM(M,obj.rx);M=sclM(M,obj.scale);
+  const Proj=persp(68,W()/H(),.1,50);
+  const MVP=mul(Proj,M);
+  gl.uniformMatrix4fv(uMVP,false,MVP);gl.uniformMatrix4fv(uM_,false,M);
+  gl.uniform3fv(uC_,obj.col);gl.uniform1f(uS_,obj===selectedObj?1:0);gl.uniform1f(uT_,t);
+  const mesh=MESH[obj.type]||MESH.box;
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.pb);gl.enableVertexAttribArray(aP_);gl.vertexAttribPointer(aP_,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.nb);gl.enableVertexAttribArray(aN_);gl.vertexAttribPointer(aN_,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.ib);gl.drawElements(gl.TRIANGLES,mesh.count,gl.UNSIGNED_SHORT,0);
+}
+
+// Project 3D → 2D
+function proj3D(x,y,z){
+  const fov=68,asp=W()/H(),f=1/Math.tan(fov*Math.PI/360);
+  const sx=(x*f/asp)/(-z+.001)*W()/2+W()/2;
+  const sy=(-y*f)/(-z+.001)*H()/2+H()/2;
+  return{x:sx,y:sy};
+}
+// Unproject 2D → 3D at depth z
+function unproj(sx,sy,depth){
+  const fov=68,asp=W()/H(),f=1/Math.tan(fov*Math.PI/360);
+  return{x:((sx-W()/2)/(W()/2))*asp/f*(-depth),y:(-(sy-H()/2)/(H()/2))/f*(-depth),z:depth};
+}
+
+// ── Scene init ──
+function initScene(){
+  objects=[
+    {type:'box',     x:-1.3,y: .0,z:-4, ry:.4, rx:0,scale:1,col:[.9,.35,.2],id:1},
+    {type:'sphere',  x: .4, y: .4,z:-4, ry:0,  rx:0,scale:1,col:[.2,.55,.95],id:2},
+    {type:'cyl',     x: 1.7,y: .0,z:-4, ry:.2, rx:0,scale:1,col:[.2,.85,.45],id:3},
+    {type:'pyramid', x:-.5, y: .0,z:-5, ry:1.0,rx:0,scale:1,col:[.95,.78,.1],id:4},
+    {type:'torus',   x: 1.1,y: .2,z:-5, ry:.5, rx:.3,scale:1,col:[.75,.2,.95],id:5},
+    {type:'gem',     x:-1.6,y: .3,z:-5, ry:0,  rx:0,scale:1,col:[.5,.9,1.0],id:6},
+  ];
+  selectedObj=null;
+}
+
+// ─────────────────────────────────────────────
+//  HAND CANVAS (skeleton)
+// ─────────────────────────────────────────────
+const hc=document.getElementById('hand-canvas');
+const hctx=hc.getContext('2d');
+const CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+
+function drawSkeleton(lm){
+  hc.width=W();hc.height=H();hctx.clearRect(0,0,W(),H());
+  const pts=lm.map(p=>({x:p.x*W(),y:p.y*H()}));
+  hctx.strokeStyle='rgba(0,255,231,.45)';hctx.lineWidth=2;
+  CONN.forEach(([a,b])=>{hctx.beginPath();hctx.moveTo(pts[a].x,pts[a].y);hctx.lineTo(pts[b].x,pts[b].y);hctx.stroke();});
+  pts.forEach((p,i)=>{
+    const r=[4,8,12,16,20].includes(i)?6:3.5;
+    hctx.beginPath();hctx.arc(p.x,p.y,r,0,Math.PI*2);
+    hctx.fillStyle=i===8?'#00ffe7':i===4?'#ff6b00':'rgba(0,255,231,.7)';hctx.fill();
+  });
+  // Draw pinch line if pinching
+  if(gesture==='pinch'){
+    hctx.strokeStyle='rgba(255,107,0,.6)';hctx.lineWidth=2;hctx.setLineDash([4,4]);
+    hctx.beginPath();hctx.moveTo(pts[4].x,pts[4].y);hctx.lineTo(pts[8].x,pts[8].y);hctx.stroke();
+    hctx.setLineDash([]);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  GESTURE RECOGNITION
+// ─────────────────────────────────────────────
+function isExtended(tip,base){ return tip.y < base.y - 0.045; }
+
+function detectGesture(lm){
+  const extI=isExtended(lm[8],lm[5]);
+  const extM=isExtended(lm[12],lm[9]);
+  const extR=isExtended(lm[16],lm[13]);
+  const extP=isExtended(lm[20],lm[17]);
+  const pinchDist=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y,lm[4].z-lm[8].z);
+  const isPinch=pinchDist<0.075;
+  if(extI&&extM&&extR&&extP) return 'open';
+  if(!extI&&!extM&&!extR&&!extP&&!isPinch) return 'fist';
+  if(isPinch) return 'pinch';
+  if(extI&&extM&&!extR&&!extP) return 'two';
+  if(extI&&!extM&&!extR&&!extP) return 'point';
+  return 'other';
+}
+
+// ─────────────────────────────────────────────
+//  GESTURE LOGIC
+// ─────────────────────────────────────────────
+function processGesture(g,lm){
+  const cursor=document.getElementById('finger-cursor');
+  cursor.style.display='block';
+  cursor.style.left=smoothX+'px';cursor.style.top=smoothY+'px';
+  cursor.className=g==='two'||g==='pinch'?'grab':g==='open'?'open-hand':'';
+
+  const labels={point:'☝️ НАВЕСТИ',two:'✌️ СХОПИТИ',pinch:'🤏 МАСШТАБ',open:'✋ ПАНЕЛЬ',fist:'👊 КИНУТИ',other:'◈ СТЕЖУ'};
+  document.getElementById('gesture-display').textContent=labels[g]||'◈';
+
+  if(g!==prevGesture){prevGesture=g;gestureFrames=0;}
+  else gestureFrames++;
+
+  // ── ☝️ POINT: hover/select ──
+  if(g==='point'){
+    const hit=hitTest(smoothX,smoothY);
+    if(gestureFrames===2&&hit&&hit!==selectedObj){
+      objects.forEach(o=>o.selected=false);
+      selectedObj=hit;hit.selected=true;flash('☝️');
+    }
+    if(panelOpen) updatePanelHover(smoothX,smoothY);
+    showSelectRing();
+  } else { panelHoverIdx=-1;panelHoverFrames=0; hideSelectRing(); }
+
+  // ── ✌️ TWO: move ──
+  if(g==='two'&&selectedObj){
+    if(gestureFrames===0){grabStartX=smoothX;grabStartY=smoothY;grabOX=selectedObj.x;grabOY=selectedObj.y;}
+    const depth=selectedObj.z;
+    const dx=(smoothX-grabStartX)/W()*(-depth)*2.2;
+    const dy=-(smoothY-grabStartY)/H()*(-depth)*2.2;
+    selectedObj.x=grabOX+dx;selectedObj.y=grabOY+dy;
+  } else if(g!=='two'){grabStartX=0;grabStartY=0;}
+
+  // ── 🤏 PINCH: scale ──
+  if(g==='pinch'&&selectedObj){
+    const tx=(1-lm[4].x)*W(),ty=lm[4].y*H();
+    const d=Math.hypot(tx-smoothX,ty-smoothY);
+    if(gestureFrames===0){pinchStart=d;scaleStart=selectedObj.scale;}
+    if(pinchStart>10) selectedObj.scale=Math.max(.2,Math.min(3.5,scaleStart*(d/pinchStart)));
+  } else if(g!=='pinch'){pinchStart=0;}
+
+  // ── ✋ OPEN: toggle panel (hold) ──
+  if(g==='open'&&gestureFrames===20){togglePanel();flash('✋');}
+
+  // ── 👊 FIST: throw ──
+  if(g==='fist'&&gestureFrames===1&&selectedObj&&throwCooldown<=0){
+    selectedObj.x+=(smoothX-W()/2)/W()*1.5;
+    selectedObj.z-=1.8;
+    flash('💨');selectedObj.selected=false;selectedObj=null;throwCooldown=35;
+  }
+  if(throwCooldown>0)throwCooldown--;
+}
+
+function hitTest(sx,sy){
+  let best=null,bestD=Infinity;
+  objects.forEach(o=>{
+    const sp=proj3D(o.x,o.y,o.z);
+    const r=Math.max(35,90/(-o.z||4)*o.scale);
+    const d=Math.hypot(sp.x-sx,sp.y-sy);
+    if(d<r*1.6&&(-o.z)<bestD){bestD=-o.z;best=o;}
+  });
+  return best;
+}
+
+function showSelectRing(){
+  if(!selectedObj){hideSelectRing();return;}
+  const sp=proj3D(selectedObj.x,selectedObj.y,selectedObj.z);
+  const r=Math.max(30,80/(-selectedObj.z)*selectedObj.scale);
+  const ring=document.getElementById('select-ring');
+  ring.style.display='block';
+  ring.style.left=(sp.x-r)+'px';ring.style.top=(sp.y-r)+'px';
+  ring.style.width=ring.style.height=(r*2)+'px';
+}
+function hideSelectRing(){document.getElementById('select-ring').style.display='none';}
+
+// Panel hover (hand hovers over panel item for PANEL_HOLD_FRAMES to select)
+function updatePanelHover(sx,sy){
+  const items=document.querySelectorAll('.panel-item');
+  let found=-1;
+  items.forEach((el,i)=>{
+    const r=el.getBoundingClientRect();
+    if(sx>=r.left&&sx<=r.right&&sy>=r.top&&sy<=r.bottom)found=i;
+    el.classList.toggle('hov',i===found);
+    const bar=el.querySelector('.panel-progress');
+    if(bar) bar.style.width=i===found&&found===panelHoverIdx?Math.min(100,panelHoverFrames/PANEL_HOLD_FRAMES*100)+'%':'0%';
+  });
+  if(found!==-1){
+    if(found===panelHoverIdx){panelHoverFrames++;if(panelHoverFrames>=PANEL_HOLD_FRAMES){spawnFromPanel(found);panelHoverFrames=0;}}
+    else{panelHoverIdx=found;panelHoverFrames=0;}
+  } else{panelHoverIdx=-1;panelHoverFrames=0;}
+}
+
+// ─────────────────────────────────────────────
+//  PANEL
+// ─────────────────────────────────────────────
+function buildPanel(){
+  const panel=document.getElementById('panel');
+  panel.innerHTML='<div id="panel-title">ПРЕДМЕТИ</div>';
+  CATALOG.forEach((c,i)=>{
+    const div=document.createElement('div');div.className='panel-item';div.dataset.idx=i;
+    div.style.background=`rgba(${c.col.map(v=>Math.round(v*55)).join(',')},0.6)`;
+    div.innerHTML=`<span>${c.emoji}</span><label>${c.label}</label><div class="panel-progress"></div>`;
+    div.onclick=()=>spawnFromPanel(i);panel.appendChild(div);
+  });
+}
+function togglePanel(){panelOpen=!panelOpen;document.getElementById('panel').classList.toggle('open',panelOpen);}
+function spawnFromPanel(i){
+  const c=CATALOG[i];
+  const o={type:c.type,x:0,y:0,z:-4,ry:Math.random()*Math.PI*2,rx:0,scale:1,col:[...c.col],id:Math.random(),selected:true};
+  objects.forEach(o=>o.selected=false);objects.push(o);selectedObj=o;
+  panelOpen=false;document.getElementById('panel').classList.remove('open');flash(c.emoji);
+}
+function clearScene(){initScene();flash('🗑️');}
+
+// ─────────────────────────────────────────────
+//  FLASH
+// ─────────────────────────────────────────────
+function flash(emoji){
+  const el=document.getElementById('gesture-flash');
+  el.textContent=emoji;el.style.opacity='1';
+  clearTimeout(flashTmr);flashTmr=setTimeout(()=>el.style.opacity='0',700);
+}
+
+// ─────────────────────────────────────────────
+//  MEDIAPIPE
+// ─────────────────────────────────────────────
+let mediapipeHands, mpCamera;
+
+async function startGame(){
+  document.getElementById('boot').style.display='none';
+  document.getElementById('loading').style.display='flex';
+  setBar(10);
+  initScene();buildPanel();
+
+  const video=document.getElementById('cam-video');
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+    video.srcObject=stream;
+    await new Promise(r=>video.onloadedmetadata=r);
+    video.play();
+  } catch(e){
+    alert('❌ Дозволь камеру в браузері!\n\nПотрібен HTTPS або localhost.\n\n'+e.message);
+    document.getElementById('loading').style.display='none';
+    document.getElementById('boot').style.display='flex';return;
+  }
+  setBar(40);
+
+  mediapipeHands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  mediapipeHands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.7,minTrackingConfidence:.6});
+  mediapipeHands.onResults(onResults);
+  setBar(70);
+
+  mpCamera=new Camera(video,{onFrame:async()=>{await mediapipeHands.send({image:video});},width:640,height:480});
+  await mpCamera.start();
+  setBar(100);
+
+  setTimeout(()=>{
+    document.getElementById('loading').style.display='none';
+    document.getElementById('game').style.display='block';
+    renderLoop();
+  },400);
+}
+function setBar(v){document.getElementById('load-bar').style.width=v+'%';}
+
+function onResults(res){
+  hc.width=W();hc.height=H();hctx.clearRect(0,0,W(),H());
+  if(!res.multiHandLandmarks||!res.multiHandLandmarks.length){
+    handVisible=false;lastLM=null;
+    document.getElementById('finger-cursor').style.display='none';
+    document.getElementById('gesture-display').textContent='◈ ПОКАЖИ РУКУ';
+    hideSelectRing();return;
+  }
+  handVisible=true;
+  const lm=res.multiHandLandmarks[0];lastLM=lm;
+  drawSkeleton(lm);
+  // Mirror x (camera is mirrored in CSS)
+  const ix=(1-lm[8].x)*W(), iy=lm[8].y*H();
+  fingerX=ix;fingerY=iy;
+  smoothX+=(ix-smoothX)*.35;smoothY+=(iy-smoothY)*.35;
+  gesture=detectGesture(lm);
+  processGesture(gesture,lm);
+}
+
+// ─────────────────────────────────────────────
+//  RENDER LOOP
+// ─────────────────────────────────────────────
+function renderLoop(){
+  requestAnimationFrame(renderLoop);
+  const t=performance.now()/1000;
+  sc.width=W();sc.height=H();
+  gl.viewport(0,0,W(),H());
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  objects.forEach(o=>{if(o!==selectedObj)o.ry+=.007;drawObject(o,t);});
+  if(selectedObj)showSelectRing();
+  fcount++;
+  if(t-lastFPSt>1){document.getElementById('fps-display').textContent=fcount+' FPS';fcount=0;lastFPSt=t;}
+  document.getElementById('obj-count').textContent=objects.length+' OBJ';
+}
+
+// Desktop fallback
+window.addEventListener('keydown',e=>{
+  if(e.key==='p')togglePanel();
+  if(e.key==='Escape'){panelOpen=false;document.getElementById('panel').classList.remove('open');if(selectedObj){selectedObj.selected=false;selectedObj=null;}}
+  if(selectedObj){
+    if(e.key==='r')selectedObj.ry+=.15;
+    if(e.key==='ArrowUp')selectedObj.z-=.15;
+    if(e.key==='ArrowDown')selectedObj.z+=.15;
+    if(e.key==='+')selectedObj.scale=Math.min(3.5,selectedObj.scale+.1);
+    if(e.key==='-')selectedObj.scale=Math.max(.2,selectedObj.scale-.1);
+  }
+});
+window.addEventListener('resize',()=>{sc.width=W();sc.height=H();hc.width=W();hc.height=H();});
+</script>
+</body>
+</html>
