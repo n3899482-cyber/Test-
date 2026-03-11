@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>VR Space Shooter</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'Orbitron',monospace;color:#fff}
+
+#boot{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0d001a,#000);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}
+#boot h1{font-size:clamp(26px,7vw,48px);letter-spacing:6px;text-align:center;line-height:1.3}
+#boot h1 em{color:#ff2255;font-style:normal;text-shadow:0 0 25px #ff2255}
+.sub{font-size:9px;letter-spacing:5px;color:rgba(255,255,255,.3)}
+.gcards{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:min(320px,92vw);margin:4px 0}
+.gc{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px;display:flex;align-items:center;gap:8px}
+.gc .e{font-size:20px}
+.gc b{color:#ff2255;font-size:9px;letter-spacing:1px;display:block;margin-bottom:2px}
+.gc span{font-size:8px;color:rgba(255,255,255,.4)}
+#startbtn{font-family:'Orbitron',monospace;font-size:13px;letter-spacing:5px;padding:14px 42px;border:none;border-radius:4px;cursor:pointer;background:linear-gradient(135deg,#ff2255,#ff5500);color:#fff;box-shadow:0 0 28px rgba(255,34,85,.5);transition:.25s}
+#startbtn:active{transform:scale(.96)}
+.note{font-size:8px;letter-spacing:2px;color:rgba(255,180,0,.5);text-align:center}
+
+#loading{position:fixed;inset:0;z-index:99;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+#loading p{font-size:10px;letter-spacing:4px;color:#ff2255}
+#pbar{width:180px;height:2px;background:rgba(255,255,255,.1)}
+#pfill{height:100%;width:0;background:linear-gradient(90deg,#ff2255,#ff5500);transition:width .3s}
+
+#vr{position:fixed;inset:0;display:none}
+.eye{position:absolute;top:0;bottom:0;overflow:hidden}
+#eyeL{left:0;width:50%}
+#eyeR{left:50%;width:50%;border-left:3px solid #111}
+.eye video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.eye canvas{position:absolute;top:0;left:0}
+
+.xh{position:absolute;width:50px;height:50px;margin:-25px 0 0 -25px;pointer-events:none;z-index:10}
+.xh::before,.xh::after{content:'';position:absolute;background:rgba(255,34,85,.8)}
+.xh::before{width:2px;height:18px;left:24px;top:2px}
+.xh::after{width:18px;height:2px;top:24px;left:2px}
+.xring{position:absolute;inset:8px;border:1.5px solid rgba(255,34,85,.6);border-radius:50%;animation:spin 4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.xdot{position:absolute;width:4px;height:4px;background:#ff2255;border-radius:50%;top:23px;left:23px}
+.xh.lock .xring{border-color:#ffcc00;box-shadow:0 0 8px #ffcc00}
+.xh.lock .xdot{background:#ffcc00}
+
+.ehud{position:absolute;top:0;width:100%;z-index:20;padding:8px 0;background:linear-gradient(to bottom,rgba(0,0,0,.65),transparent);text-align:center;pointer-events:none}
+.sv{font-size:17px;color:#ff2255;display:block;text-shadow:0 0 10px #ff2255}
+.sl{font-size:7px;color:rgba(255,255,255,.3)}
+.ehp{position:absolute;bottom:65px;width:100%;display:flex;justify-content:center;gap:4px;z-index:20;pointer-events:none}
+.heart{font-size:13px;transition:.3s}
+.heart.off{opacity:.15;filter:grayscale(1)}
+.egl{position:absolute;bottom:12px;width:100%;text-align:center;font-size:8px;letter-spacing:3px;color:rgba(255,255,255,.28);z-index:20;pointer-events:none}
+
+#kflash{position:fixed;inset:0;z-index:30;pointer-events:none;opacity:0;background:radial-gradient(ellipse,rgba(255,34,85,.3),transparent 60%);transition:opacity .1s}
+#dflash{position:fixed;inset:0;z-index:31;pointer-events:none;opacity:0;background:rgba(200,0,0,.4);transition:opacity .15s}
+#wt{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:clamp(18px,5vw,30px);letter-spacing:8px;z-index:40;pointer-events:none;opacity:0;transition:opacity .3s;white-space:nowrap;text-shadow:0 0 20px #ff2255}
+
+#over{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+#over h2{font-size:clamp(22px,6vw,44px);color:#ff2255;letter-spacing:8px;text-shadow:0 0 30px #ff2255}
+#over p{font-size:9px;letter-spacing:3px;color:rgba(255,255,255,.4);text-align:center;line-height:2.4}
+#over p span{color:#fff;font-size:13px}
+#rebtn{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:4px;padding:12px 30px;background:transparent;border:1.5px solid #ff2255;color:#ff2255;border-radius:3px;cursor:pointer;transition:.25s}
+#rebtn:hover{background:#ff2255;color:#000}
+.spark{position:fixed;border-radius:50%;pointer-events:none;z-index:35;animation:sparkgo .4s ease-out forwards}
+@keyframes sparkgo{to{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="sub">— AR / VR SHOOTER —</div>
+  <h1>ALIEN<br><em>INVASION</em></h1>
+  <div class="gcards">
+    <div class="gc"><span class="e">☝️</span><div><b>ПРИЦІЛЮВАННЯ</b><span>Рухай пальцем</span></div></div>
+    <div class="gc"><span class="e">🤏</span><div><b>ПОСТРІЛ</b><span>Зроби щипок</span></div></div>
+    <div class="gc"><span class="e">✌️</span><div><b>ЛАЗЕР</b><span>Два пальці</span></div></div>
+    <div class="gc"><span class="e">✋</span><div><b>ЩИТ</b><span>Відкрита долоня</span></div></div>
+  </div>
+  <button id="startbtn" onclick="init()">▶&nbsp;&nbsp;СТАРТ</button>
+  <div class="note">⚠️ Потрібен HTTPS та камера</div>
+</div>
+
+<div id="loading">
+  <p id="pmsg">ЗАВАНТАЖЕННЯ...</p>
+  <div id="pbar"><div id="pfill"></div></div>
+</div>
+
+<div id="vr">
+  <div class="eye" id="eyeL">
+    <video autoplay playsinline muted></video>
+    <canvas id="c3L"></canvas>
+    <canvas id="hcL"></canvas>
+    <div class="xh" id="xhL"><div class="xring"></div><div class="xdot"></div></div>
+    <div class="ehud"><span class="sv" id="scNum">0</span><span class="sl">ОЧКИ</span></div>
+    <div class="ehp" id="hpL"></div>
+    <div class="egl" id="gLabL">◈</div>
+  </div>
+  <div class="eye" id="eyeR">
+    <video autoplay playsinline muted></video>
+    <canvas id="c3R"></canvas>
+    <canvas id="hcR"></canvas>
+    <div class="xh" id="xhR"><div class="xring"></div><div class="xdot"></div></div>
+    <div class="ehud"><span class="sv" id="wvNum">ХВИЛЯ 1</span><span class="sl">РІВЕНЬ</span></div>
+    <div class="ehp" id="hpR"></div>
+    <div class="egl" id="gLabR">◈</div>
+  </div>
+</div>
+
+<div id="kflash"></div>
+<div id="dflash"></div>
+<div id="wt"></div>
+<div id="over">
+  <h2>ЗАГИНУВ</h2>
+  <p>ВБИТО<br><span id="ok">0</span><br>ХВИЛЯ<br><span id="ow">1</span><br>ОЧКИ<br><span id="os">0</span></p>
+  <button id="rebtn" onclick="restart()">↺ ЩЕ РАЗ</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const EW=()=>window.innerWidth/2|0;
+const EH=()=>window.innerHeight;
+function setP(v){$('pfill').style.width=v+'%';}
+function flash(id,d=150){const e=$(id);e.style.opacity='1';setTimeout(()=>e.style.opacity='0',d);}
+
+// game state
+let score=0,wave=1,hp=5,kills=0,alive=false;
+let enemies=[],bullets=[],eBullets=[],parts=[];
+let shield=false,shieldT=0,shootCD=0,laserCD=0,waveCD=0;
+
+// hand
+let cx=0.5,cy=0.5,warmup=0,pinchF=0,openF=0,laserOn=false;
+
+// GL (all set in init)
+let glL,glR,locL,locR,meshL,meshR,hcLctx,hcRctx;
+let animT=0,lastT=0;
+
+// ── matrices ─────────────────────────────
+const m4=()=>new Float32Array(16);
+function I(){const m=m4();m[0]=m[5]=m[10]=m[15]=1;return m;}
+function mul(a,b){const r=m4();for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[i*4+k]*b[k*4+j];r[i*4+j]=s;}return r;}
+function Proj(asp){const t=1/Math.tan(70*Math.PI/360),r=m4();r[0]=t/asp;r[5]=t;r[10]=(60.05)/(0.05-60);r[11]=-1;r[14]=2*60*.05/(0.05-60);return r;}
+function Tr(x,y,z){const r=I();r[12]=x;r[13]=y;r[14]=z;return r;}
+function Sc(s){const r=I();r[0]=r[5]=r[10]=s;return r;}
+function Ry(a){const c=Math.cos(a),s=Math.sin(a),r=I();r[0]=c;r[2]=s;r[8]=-s;r[10]=c;return r;}
+
+// ── shaders ───────────────────────────────
+const VS=`attribute vec3 aP,aN;uniform mat4 uMVP,uM;varying vec3 vN,vW;
+void main(){vN=(uM*vec4(aN,0)).xyz;vW=(uM*vec4(aP,1)).xyz;gl_Position=uMVP*vec4(aP,1);}`;
+const FS=`precision mediump float;varying vec3 vN,vW;uniform vec3 uC;uniform float uG;
+void main(){vec3 L=normalize(vec3(2,5,3)-vW);float d=max(dot(normalize(vN),L),0.)*.7+.3;
+vec3 c=uC*d;if(uG>0.)c=mix(c,uC,uG)+uC*uG*.4;gl_FragColor=vec4(c,1);}`;
+
+function buildGL(canvas){
+  canvas.width=EW(); canvas.height=EH();
+  const gl=canvas.getContext('webgl',{antialias:true,alpha:true,premultipliedAlpha:false});
+  gl.clearColor(0,0,0,0);
+  gl.viewport(0,0,canvas.width,canvas.height);
+  function sh(t,s){const h=gl.createShader(t);gl.shaderSource(h,s);gl.compileShader(h);return h;}
+  const pr=gl.createProgram();
+  gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));
+  gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));
+  gl.linkProgram(pr);gl.useProgram(pr);
+  return{gl,loc:{aP:gl.getAttribLocation(pr,'aP'),aN:gl.getAttribLocation(pr,'aN'),
+    uMVP:gl.getUniformLocation(pr,'uMVP'),uM:gl.getUniformLocation(pr,'uM'),
+    uC:gl.getUniformLocation(pr,'uC'),uG:gl.getUniformLocation(pr,'uG')}};
+}
+
+function upload(gl,pos,nrm,idx){
+  const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);
+  const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nrm),gl.STATIC_DRAW);
+  const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+  return{pb,nb,ib,n:idx.length};
+}
+
+function mkSaucer(gl){
+  const p=[],n=[],idx=[],S=16;
+  for(let i=0;i<=S;i++){const a=i/S*Math.PI*2,co=Math.cos(a),si=Math.sin(a);
+    p.push(co*.5,-.04,si*.5, co*.5,.08,si*.5, co*.14,-.02,si*.14, co*.14,.2,si*.14);
+    n.push(co,-1,si, co,1,si, 0,-.5,0, 0,1,0);}
+  for(let i=0;i<S;i++){const b=i*4;
+    idx.push(b,b+4,b+1,b+4,b+5,b+1,b+1,b+5,b+3,b+5,b+7,b+3,b+3,b+7,b+2,b+7,b+6,b+2,b+2,b+6,b,b+6,b+4,b);}
+  return upload(gl,p,n,idx);
+}
+function mkSph(gl,r=.11,sg=7){
+  const p=[],n=[],idx=[];
+  for(let y=0;y<=sg;y++){const phi=y/sg*Math.PI;for(let x=0;x<=sg;x++){const th=x/sg*Math.PI*2,bx=Math.sin(phi)*Math.cos(th),by=Math.cos(phi),bz=Math.sin(phi)*Math.sin(th);p.push(bx*r,by*r,bz*r);n.push(bx,by,bz);}}
+  for(let y=0;y<sg;y++)for(let x=0;x<sg;x++){const a=y*(sg+1)+x;idx.push(a,a+1,a+sg+1,a+1,a+sg+2,a+sg+1);}
+  return upload(gl,p,n,idx);
+}
+function mkTorus(gl){
+  const p=[],n=[],idx=[],R=.6,r=.05,sj=8,si=18;
+  for(let j=0;j<=sj;j++){const ph=j/sj*Math.PI*2;for(let i=0;i<=si;i++){const th=i/si*Math.PI*2,cx=(R+r*Math.cos(th))*Math.cos(ph),cy=r*Math.sin(th),cz=(R+r*Math.cos(th))*Math.sin(ph);p.push(cx,cy,cz);n.push(Math.cos(th)*Math.cos(ph),Math.sin(th),Math.cos(th)*Math.sin(ph));}}
+  for(let j=0;j<sj;j++)for(let i=0;i<si;i++){const a=j*(si+1)+i;idx.push(a,a+1,a+si+1,a+1,a+si+2,a+si+1);}
+  return upload(gl,p,n,idx);
+}
+function buildMeshes(gl){return{s:mkSaucer(gl),b:mkSph(gl,.11),eb:mkSph(gl,.09),sh:mkTorus(gl),xp:mkSph(gl,.09,5)};}
+
+function draw(gl,loc,mesh,M,col,glow=0){
+  const MVP=mul(Proj(EW()/EH()),M);
+  gl.uniformMatrix4fv(loc.uMVP,false,MVP);gl.uniformMatrix4fv(loc.uM,false,M);
+  gl.uniform3fv(loc.uC,col);gl.uniform1f(loc.uG,glow);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.pb);gl.enableVertexAttribArray(loc.aP);gl.vertexAttribPointer(loc.aP,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.nb);gl.enableVertexAttribArray(loc.aN);gl.vertexAttribPointer(loc.aN,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.ib);gl.drawElements(gl.TRIANGLES,mesh.n,gl.UNSIGNED_SHORT,0);
+}
+
+function renderEye(gl,loc,mesh){
+  gl.viewport(0,0,EW(),EH());
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  enemies.forEach(e=>{if(e.dead)return;draw(gl,loc,mesh.s,mul(mul(Tr(e.x,e.y,e.z),Ry(e.ry)),Sc(e.sc)),e.col,Math.max(0,1-e.hp/e.maxHp));});
+  bullets.forEach(b=>{if(!b.alive)return;draw(gl,loc,mesh.b,Tr(b.x,b.y,b.z),[1,.3,.05],1);});
+  eBullets.forEach(b=>{if(!b.alive)return;draw(gl,loc,mesh.eb,Tr(b.x,b.y,b.z),[1,.05,.05],.8);});
+  parts.forEach(p=>{if(p.life<=0)return;draw(gl,loc,mesh.xp,mul(Tr(p.x,p.y,p.z),Sc(p.life/p.ml*.18)),p.col,1);});
+  if(shield)draw(gl,loc,mesh.sh,mul(Tr(0,0,-.3),Sc(.85+Math.sin(animT*8)*.04)),[.1,.5,1],1.5);
+}
+
+function moveCross(nx,ny){
+  const px=nx*EW(),py=ny*EH();
+  ['xhL','xhR'].forEach(id=>{const el=$(id);el.style.left=px+'px';el.style.top=py+'px';el.style.transform='none';el.style.margin='-25px 0 0 -25px';});
+}
+
+function shoot(){
+  if(shootCD>0||!alive)return;
+  const fov=70*Math.PI/180,asp=EW()/EH();
+  const wx=(cx-.5)*2*Math.tan(fov/2)*asp*5;
+  const wy=-(cy-.5)*2*Math.tan(fov/2)*5;
+  const l=Math.hypot(wx,wy,5);
+  bullets.push({x:0,y:0,z:0,vx:wx/l*.32,vy:wy/l*.32,vz:-5/l*.32,alive:true,life:90});
+  shootCD=10;
+  for(let i=0;i<5;i++){const s=document.createElement('div');s.className='spark';const a=Math.random()*Math.PI*2,d=25+Math.random()*40;s.style.cssText=`left:${EW()/2}px;top:${EH()/2}px;width:${3+Math.random()*4}px;height:${3+Math.random()*4}px;background:#ff5500;--tx:${Math.cos(a)*d}px;--ty:${Math.sin(a)*d}px`;document.body.appendChild(s);setTimeout(()=>s.remove(),420);}
+}
+
+function laserHit(){
+  const fov=70*Math.PI/180,asp=EW()/EH();
+  const wx=(cx-.5)*2*Math.tan(fov/2)*asp,wy=-(cy-.5)*2*Math.tan(fov/2);
+  const l=Math.hypot(wx,wy,1),dx=wx/l,dy=wy/l,dz=-1/l;
+  enemies.forEach(e=>{if(e.dead)return;const pj=e.x*dx+e.y*dy+e.z*dz;if(pj<0)return;const dist=Math.hypot(e.x-dx*pj,e.y-dy*pj,e.z-dz*pj);if(dist<.5*e.sc){e.hp-=.4;if(e.hp<=0)killEnemy(e);}});
+}
+
+function killEnemy(e){
+  e.dead=true;score+=e.sc>1?300:100;kills++;
+  for(let i=0;i<10;i++)parts.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*.1,vy:(Math.random()-.5)*.1,vz:(Math.random()-.5)*.1,col:[...e.col],life:35,ml:35});
+  flash('kflash',120);updateHUD();
+}
+
+function takeDmg(n=1){
+  if(shield)return;hp=Math.max(0,hp-n);updateHUD();flash('dflash',200);if(hp<=0)gameOver();
+}
+
+function spawnWave(){
+  enemies=[];eBullets=[];
+  const cnt=3+wave*2;
+  for(let i=0;i<cnt;i++)setTimeout(()=>{
+    if(!alive)return;
+    const t=Math.random()<.25?'big':Math.random()<.25?'fast':'normal';
+    const mhp=t==='big'?3+wave:1;
+    enemies.push({x:(Math.random()-.5)*7,y:(Math.random()-.5)*3.5,z:-(9+Math.random()*8),vx:(Math.random()-.5)*.015,vy:0,vz:.018+wave*.006+(t==='fast'?.02:0),ry:0,hp:mhp,maxHp:mhp,sc:t==='big'?1.8:t==='fast'?.65:1,col:t==='big'?[.9,.08,.08]:t==='fast'?[.1,.9,.4]:[.55,.05,.9],shootT:80+Math.random()*80,dead:false});
+  },i*350);
+  const el=$('wt');el.textContent='ХВИЛЯ '+wave;el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2200);
+  $('wvNum').textContent='ХВИЛЯ '+wave;
+}
+
+function updateHUD(){
+  $('scNum').textContent=score;
+  ['hpL','hpR'].forEach(id=>{const el=$(id);el.innerHTML='';for(let i=0;i<5;i++){const h=document.createElement('div');h.className='heart'+(i>=hp?' off':'');h.textContent='❤️';el.appendChild(h);}});
+}
+
+function gameOver(){alive=false;$('ok').textContent=kills;$('ow').textContent=wave;$('os').textContent=score;$('over').style.display='flex';}
+function restart(){score=0;wave=1;hp=5;kills=0;enemies=[];bullets=[];eBullets=[];parts=[];shield=false;shootCD=0;waveCD=0;warmup=0;$('over').style.display='none';updateHUD();alive=true;spawnWave();}
+
+// skeleton
+const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+function drawSkel(ctx,lm,g){
+  ctx.clearRect(0,0,EW(),EH());
+  const pts=lm.map(p=>({x:(1-p.x)*EW(),y:p.y*EH()}));
+  const col=g==='pinch'?'rgba(255,85,0,.7)':g==='two'?'rgba(51,255,160,.7)':'rgba(255,34,85,.5)';
+  BONES.forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(pts[a].x,pts[a].y);ctx.lineTo(pts[b].x,pts[b].y);ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();});
+  pts.forEach((pt,i)=>{const tip=[4,8,12,16,20].includes(i);ctx.beginPath();ctx.arc(pt.x,pt.y,tip?5.5:3,0,Math.PI*2);ctx.fillStyle=i===8?'#ff2255':tip?'#fff':'rgba(255,34,85,.55)';ctx.fill();});
+}
+function drawLaser(ctx){
+  if(!laserOn||!alive){ctx.clearRect(0,0,EW(),EH());return;}
+  ctx.clearRect(0,0,EW(),EH());
+  const tx=cx*EW(),ty=cy*EH(),ox=EW()/2,oy=EH()/2;
+  const g=ctx.createLinearGradient(ox,oy,tx,ty);
+  g.addColorStop(0,'rgba(51,255,160,.9)');g.addColorStop(1,'rgba(51,255,160,.05)');
+  ctx.beginPath();ctx.moveTo(ox,oy);ctx.lineTo(tx,ty);ctx.strokeStyle=g;ctx.lineWidth=4;ctx.shadowBlur=16;ctx.shadowColor='#33ffa0';ctx.stroke();ctx.shadowBlur=0;
+  ctx.beginPath();ctx.arc(tx,ty,7,0,Math.PI*2);ctx.fillStyle='rgba(51,255,160,.55)';ctx.fill();
+}
+
+function isUp(a,b){return a.y<b.y-.055;}
+function getGest(lm){
+  const eI=isUp(lm[8],lm[5]),eM=isUp(lm[12],lm[9]),eR=isUp(lm[16],lm[13]),eP=isUp(lm[20],lm[17]);
+  const pd=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y);
+  if(eI&&eM&&eR&&eP)return 'open';
+  if(eI&&eM&&!eR&&!eP)return 'two';
+  if(eI&&!eM&&!eR&&!eP)return 'point';
+  if(pd<.07&&!eM&&!eR&&!eP)return 'pinch';
+  return 'idle';
+}
+function handleGest(g,lm){
+  if(warmup<15){warmup++;return;}
+  cx=1-lm[8].x;cy=lm[8].y;moveCross(cx,cy);
+  const labs={point:'☝️ ПРИЦІЛ',two:'✌️ ЛАЗЕР',pinch:'🔥 ПОСТРІЛ',open:'🛡️ ЩИТ',idle:'◈'};
+  $('gLabL').textContent=labs[g]||'◈';$('gLabR').textContent=labs[g]||'◈';
+  ['xhL','xhR'].forEach(id=>$(id).className='xh'+(g==='pinch'?' lock':''));
+  if(g==='pinch'){pinchF++;if(pinchF%8===1)shoot();}else pinchF=0;
+  laserOn=(g==='two');if(laserOn&&laserCD<=0){laserHit();laserCD=4;}
+  if(g==='open'){openF++;if(openF===12){shield=true;shieldT=150;}}else openF=0;
+  if(shootCD>0)shootCD--;if(laserCD>0)laserCD--;
+}
+
+function loop(t){
+  requestAnimationFrame(loop);
+  lastT=lastT||t;animT=t/1000;
+  if(!alive){lastT=t;return;}
+  lastT=t;
+  enemies.forEach(e=>{if(e.dead)return;e.x+=e.vx;e.vy=Math.sin(animT*1.4+e.x*2)*.012;e.y+=e.vy;e.z+=e.vz;e.ry+=.025;e.shootT--;
+    if(e.shootT<=0){const dx=-e.x,dy=-e.y,dz=-e.z,l=Math.hypot(dx,dy,dz),sp=.07+wave*.003;eBullets.push({x:e.x,y:e.y,z:e.z,vx:dx/l*sp,vy:dy/l*sp,vz:dz/l*sp,alive:true,life:100});e.shootT=70+Math.random()*90;}
+    if(e.z>1.2){e.dead=true;takeDmg(2);}
+  });
+  bullets.forEach(b=>{if(!b.alive)return;b.x+=b.vx;b.y+=b.vy;b.z+=b.vz;b.life--;if(b.life<=0){b.alive=false;return;}
+    enemies.forEach(e=>{if(e.dead||!b.alive)return;if(Math.hypot(b.x-e.x,b.y-e.y,b.z-e.z)<.5*e.sc){b.alive=false;e.hp--;if(e.hp<=0)killEnemy(e);}});
+  });
+  eBullets.forEach(b=>{if(!b.alive)return;b.x+=b.vx;b.y+=b.vy;b.z+=b.vz;b.life--;if(b.life<=0){b.alive=false;return;}if(Math.hypot(b.x,b.y,b.z)<.9){b.alive=false;takeDmg(1);}});
+  parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.life--;});
+  if(shield){shieldT--;if(shieldT<=0)shield=false;}
+  enemies=enemies.filter(e=>!e.dead);bullets=bullets.filter(b=>b.alive);eBullets=eBullets.filter(b=>b.alive);parts=parts.filter(p=>p.life>0);
+  if(enemies.length===0&&waveCD<=0){wave++;waveCD=200;setTimeout(spawnWave,1200);}if(waveCD>0)waveCD--;
+  renderEye(glL,locL,meshL);renderEye(glR,locR,meshR);
+  drawLaser(hcLctx);drawLaser(hcRctx);
+}
+
+let mpH,mpCam;
+function onResults(res){
+  if(!hcLctx)return;
+  if(!res.multiHandLandmarks||!res.multiHandLandmarks.length){
+    hcLctx.clearRect(0,0,EW(),EH());hcRctx.clearRect(0,0,EW(),EH());
+    warmup=0;laserOn=false;$('gLabL').textContent='◈ ПОКАЖИ РУКУ';$('gLabR').textContent='◈ ПОКАЖИ РУКУ';return;
+  }
+  const lm=res.multiHandLandmarks[0];const g=getGest(lm);
+  drawSkel(hcLctx,lm,g);drawSkel(hcRctx,lm,g);handleGest(g,lm);
+}
+
+async function init(){
+  $('boot').style.display='none';
+  $('loading').style.display='flex';
+  setP(8);
+
+  let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:640},height:{ideal:480}},audio:false});}
+  catch(e){try{stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}
+  catch(e2){alert('Камера недоступна!\nПотрібен HTTPS.\n\n'+e2.message);$('loading').style.display='none';$('boot').style.display='flex';return;}}
+
+  setP(30);$('pmsg').textContent='КАМЕРА OK...';
+  document.querySelectorAll('.eye video').forEach(v=>v.srcObject=stream);
+  await new Promise(r=>{document.querySelector('#eyeL video').onloadedmetadata=r;});
+  document.querySelectorAll('.eye video').forEach(v=>v.play());
+
+  setP(55);$('pmsg').textContent='ЗАВАНТАЖЕННЯ AI...';
+  mpH=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  mpH.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.75,minTrackingConfidence:.7});
+  mpH.onResults(onResults);
+  setP(78);$('pmsg').textContent='ЗАПУСК...';
+  mpCam=new Camera(document.querySelector('#eyeL video'),{onFrame:async()=>await mpH.send({image:document.querySelector('#eyeL video')}),width:640,height:480});
+  await mpCam.start();
+  setP(100);
+
+  // Show VR div FIRST so dimensions are correct
+  $('vr').style.display='block';
+  $('loading').style.display='none';
+
+  // Init WebGL AFTER div visible
+  const rL=buildGL($('c3L'));glL=rL.gl;locL=rL.loc;meshL=buildMeshes(glL);
+  const rR=buildGL($('c3R'));glR=rR.gl;locR=rR.loc;meshR=buildMeshes(glR);
+
+  // Hand canvases
+  const hL=$('hcL');hL.width=EW();hL.height=EH();hcLctx=hL.getContext('2d');
+  const hR=$('hcR');hR.width=EW();hR.height=EH();hcRctx=hR.getContext('2d');
+
+  updateHUD();alive=true;spawnWave();
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
