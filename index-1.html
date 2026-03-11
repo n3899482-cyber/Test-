@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hand VR</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#06090f;overflow:hidden;font-family:'Courier New',monospace}
+#boot{position:fixed;inset:0;background:#06090f;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:14px;padding:24px}
+#boot h1{font-size:clamp(24px,7vw,44px);color:#00ffe7;letter-spacing:8px;text-shadow:0 0 30px #00ffe7}
+#boot p{color:rgba(255,255,255,.45);font-size:12px;letter-spacing:1.5px;text-align:center;max-width:290px;line-height:1.9}
+.glist{display:flex;flex-direction:column;gap:6px}
+.grow{display:flex;align-items:center;gap:10px;font-size:11px;color:rgba(255,255,255,.5)}
+.gico{font-size:18px;width:24px}
+.gname{color:#00ffe7;margin-right:3px}
+#sbtn{background:transparent;border:1.5px solid #00ffe7;color:#00ffe7;font-size:13px;letter-spacing:4px;padding:13px 36px;border-radius:3px;cursor:pointer;transition:.3s;font-family:inherit;margin-top:4px}
+#sbtn:hover{background:#00ffe7;color:#000}
+#load{position:fixed;inset:0;background:rgba(6,9,15,.95);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:998;gap:12px}
+#load p{color:#00ffe7;letter-spacing:3px;font-size:11px}
+#bw{width:180px;height:2px;background:rgba(255,255,255,.1);border-radius:2px}
+#bp{height:100%;background:#00ffe7;border-radius:2px;width:0;transition:width .3s}
+#game{position:fixed;inset:0;display:none}
+#vid{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;opacity:.25}
+#c3{position:fixed;top:0;left:0;z-index:1;pointer-events:none}
+#ch{position:fixed;top:0;left:0;z-index:2;pointer-events:none}
+#cur{position:fixed;z-index:10;pointer-events:none;display:none;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:2px solid #00ffe7;box-shadow:0 0 12px #00ffe7;transition:border-color .1s,box-shadow .1s}
+#cur.g{border-color:#ff6b00;box-shadow:0 0 16px #ff6b00}
+#hud{position:fixed;top:0;left:0;right:0;z-index:20;padding:10px 14px;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);display:flex;justify-content:space-between;pointer-events:none}
+#gl{color:#00ffe7;font-size:10px;letter-spacing:3px;text-shadow:0 0 8px #00ffe7}
+#hr{text-align:right;color:rgba(255,255,255,.25);font-size:9px}
+#fl{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:clamp(55px,13vw,88px);z-index:30;pointer-events:none;opacity:0;transition:opacity .15s}
+/* Panel */
+#panel{position:fixed;right:10px;top:50%;transform:translateY(-50%);z-index:25;display:none;flex-direction:column;gap:7px;background:rgba(3,8,18,.9);border:1px solid rgba(0,255,231,.15);border-radius:12px;padding:10px 8px;backdrop-filter:blur(12px)}
+#panel.open{display:flex}
+#ptit{color:rgba(255,255,255,.2);font-size:7px;letter-spacing:3px;text-align:center;margin-bottom:2px}
+.pi{width:54px;height:54px;border-radius:9px;border:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:2px;transition:.2s;position:relative;overflow:hidden}
+.pi:hover,.pi.hov{border-color:#00ffe7;box-shadow:0 0 10px rgba(0,255,231,.25);transform:scale(1.07)}
+.pi span{font-size:18px}
+.pi small{font-size:6px;letter-spacing:1px;color:rgba(255,255,255,.35)}
+.pb{position:absolute;bottom:0;left:0;height:2px;background:#00ffe7;width:0}
+/* Bottom */
+#btns{position:fixed;bottom:0;left:0;right:0;z-index:20;padding:6px 12px 14px;background:linear-gradient(to top,rgba(0,0,0,.6),transparent);display:flex;justify-content:center;gap:8px}
+.btn{background:rgba(0,255,231,.06);border:1px solid rgba(0,255,231,.18);color:#00ffe7;font-size:9px;letter-spacing:2px;padding:7px 13px;border-radius:22px;cursor:pointer;font-family:inherit;transition:.2s}
+.btn:hover{background:rgba(0,255,231,.16)}
+.btn.r{border-color:rgba(255,45,85,.2);color:#ff2d55;background:rgba(255,45,85,.06)}
+/* Ring */
+#ring{position:fixed;z-index:9;pointer-events:none;display:none;border:1.5px solid #00ffe7;border-radius:50%;box-shadow:0 0 8px rgba(0,255,231,.35);animation:rp 1.2s ease-in-out infinite}
+@keyframes rp{0%,100%{opacity:1}50%{opacity:.3}}
+/* Mode indicator */
+#modeinfo{position:fixed;bottom:55px;left:50%;transform:translateX(-50%);z-index:20;color:rgba(255,255,255,.35);font-size:9px;letter-spacing:2px;text-align:center;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="boot">
+  <h1>◈ HAND VR ◈</h1>
+  <p>Керуй 3D предметами рукою через камеру</p>
+  <div class="glist">
+    <div class="grow"><span class="gico">☝️</span><span><span class="gname">1 ПАЛЕЦЬ</span>вибрати предмет</span></div>
+    <div class="grow"><span class="gico">✌️</span><span><span class="gname">2 ПАЛЬЦІ</span>рухати предмет</span></div>
+    <div class="grow"><span class="gico">🤏</span><span><span class="gname">ЩИПОК</span>збільшити/зменшити</span></div>
+    <div class="grow"><span class="gico">✋</span><span><span class="gname">ДОЛОНЯ 1с</span>панель предметів</span></div>
+  </div>
+  <button id="sbtn" onclick="startGame()">▶ ЗАПУСТИТИ</button>
+</div>
+<div id="load"><p id="lmsg">ЗАВАНТАЖЕННЯ...</p><div id="bw"><div id="bp"></div></div></div>
+<div id="game">
+  <video id="vid" autoplay playsinline muted></video>
+  <canvas id="c3"></canvas>
+  <canvas id="ch"></canvas>
+  <div id="cur"></div>
+  <div id="fl"></div>
+  <div id="ring"></div>
+  <div id="hud"><div id="gl">◈ ПОКАЖИ РУКУ</div><div id="hr"><div id="ol">0 OBJ</div><div id="fps">– FPS</div></div></div>
+  <div id="panel"><div id="ptit">ПРЕДМЕТИ</div></div>
+  <div id="modeinfo">РЕЖИМ: ПЕРЕГЛЯД</div>
+  <div id="btns">
+    <button class="btn" onclick="openPanel()">✋ ПАНЕЛЬ</button>
+    <button class="btn" onclick="deselectObj()">○ СКАСУВАТИ</button>
+    <button class="btn r" onclick="clearScene()">✕ ОЧИСТИТИ</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════
+//  HAND VR — ПОВНА ПЕРЕЗАПИСКА
+//  Головний принцип: об'єкти НІКОЛИ не зникають самі.
+//  Жести тільки: point=вибрати, two=рухати, pinch=масштаб
+//  Панель відкривається кнопкою або ✋ (утримання)
+//  Ніякого auto-deselect при зміні жесту!
+// ═══════════════════════════════════════════════════════
+
+const $=id=>document.getElementById(id);
+let CW=window.innerWidth, CH=window.innerHeight;
+
+// ── Каталог предметів ─────────────────────────────────
+const CAT=[
+  {type:'box',    e:'📦',n:'КУБ',    c:[.9,.35,.2]},
+  {type:'sphere', e:'🔵',n:'КУЛЯ',   c:[.2,.55,.95]},
+  {type:'cyl',    e:'🔷',n:'ЦИЛІН',  c:[.2,.85,.45]},
+  {type:'pyramid',e:'🔺',n:'ПІРА',   c:[.95,.78,.1]},
+  {type:'torus',  e:'⭕',n:'ТОРОЇД', c:[.75,.2,.95]},
+  {type:'gem',    e:'💎',n:'КРИСТАЛ',c:[.4,.85,1.0]},
+  {type:'star',   e:'⭐',n:'ЗІРКА',  c:[1.0,.85,.1]},
+  {type:'cone',   e:'🔔',n:'КОНУС',  c:[.9,.5,.1]},
+  {type:'ring',   e:'💍',n:'КІЛЬЦЕ', c:[.9,.75,.2]},
+];
+
+// ── Стан сцени ────────────────────────────────────────
+let objs=[], SEL=null;  // SEL — вибраний об'єкт, ніколи не скидається автоматично
+let panelOpen=false, panHovIdx=-1, panHovF=0;
+const DWELL=25;
+
+// ── Стан руки ─────────────────────────────────────────
+// MODE: 'view' | 'select' | 'move' | 'scale'
+// Режим змінюється тільки явно, не при кожному кадрі
+let handMode='view';
+let curX=CW/2, curY=CH/2;  // позиція пальця на екрані
+let grabAX=0,grabAY=0,grabOX=0,grabOY=0;
+let pinchAD=0,pinchAS=1;
+let openHoldF=0;  // скільки кадрів тримаємо відкриту долоню
+let prevG='idle';
+let fc=0,fpt=0,aT=0;
+let flashTmr=null;
+// Захист від false-positive при першому показі руки
+let handWarmup=0; // перші N кадрів ігноруємо жести
+
+function mkObj(type,x,y,z,col){
+  return{type,x,y,z,col:[...col],scale:1,ry:Math.random()*Math.PI*2,rx:0};
+}
+function initScene(){
+  objs=[
+    mkObj('box',   -1.2, 0,-8,[.9,.35,.2]),
+    mkObj('sphere', 0,   0,-8,[.2,.55,.95]),
+    mkObj('cyl',    1.2, 0,-8,[.2,.85,.45]),
+    mkObj('pyramid',-0.7,0,-10,[.95,.78,.1]),
+    mkObj('torus',  0.5, 0,-10,[.75,.2,.95]),
+    mkObj('gem',    1.5, 0,-10,[.4,.85,1.0]),
+  ];
+  SEL=null; handMode='view';
+}
+
+// ═══════════════════════════════════════════════════════
+//  WebGL
+// ═══════════════════════════════════════════════════════
+const c3=$('c3');
+c3.width=CW; c3.height=CH;
+const gl=c3.getContext('webgl',{antialias:true,alpha:true,premultipliedAlpha:false});
+gl.clearColor(0,0,0,0);
+gl.viewport(0,0,CW,CH);
+
+const VS=`attribute vec3 aP,aN;uniform mat4 uM,uV;varying vec3 vN,vW;
+void main(){vN=(uM*vec4(aN,0)).xyz;vW=(uM*vec4(aP,1)).xyz;gl_Position=uV*uM*vec4(aP,1);}`;
+const FS=`precision mediump float;varying vec3 vN,vW;uniform vec3 uC;uniform float uS,uT;
+void main(){
+  vec3 L=normalize(vec3(3,6,4)-vW);
+  float d=max(dot(normalize(vN),L),0.)*.7+.3;
+  vec3 c=uC*d;
+  if(uS>.5){float p=sin(uT*4.)*.3+.7;c=mix(c,vec3(0,1,.88),.25*p)+vec3(0,1,.88)*.1*p;}
+  gl_FragColor=vec4(c,1);
+}`;
+function mks(t,s){const h=gl.createShader(t);gl.shaderSource(h,s);gl.compileShader(h);return h;}
+const pr=gl.createProgram();
+gl.attachShader(pr,mks(gl.VERTEX_SHADER,VS));
+gl.attachShader(pr,mks(gl.FRAGMENT_SHADER,FS));
+gl.linkProgram(pr);gl.useProgram(pr);
+const L={aP:gl.getAttribLocation(pr,'aP'),aN:gl.getAttribLocation(pr,'aN'),
+  uM:gl.getUniformLocation(pr,'uM'),uV:gl.getUniformLocation(pr,'uV'),
+  uC:gl.getUniformLocation(pr,'uC'),uS:gl.getUniformLocation(pr,'uS'),uT:gl.getUniformLocation(pr,'uT')};
+
+// Matrix helpers
+const m4=()=>new Float32Array(16);
+function eye(){const m=m4();m[0]=m[5]=m[10]=m[15]=1;return m;}
+function mul(a,b){const r=m4();for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[i*4+k]*b[k*4+j];r[i*4+j]=s;}return r;}
+function persp(fov,asp,n,f){const t=1/Math.tan(fov*Math.PI/360),r=m4();r[0]=t/asp;r[5]=t;r[10]=(f+n)/(n-f);r[11]=-1;r[14]=2*f*n/(n-f);return r;}
+function T(x,y,z){const r=eye();r[12]=x;r[13]=y;r[14]=z;return r;}
+function Ry(a){const c=Math.cos(a),s=Math.sin(a),r=eye();r[0]=c;r[2]=s;r[8]=-s;r[10]=c;return r;}
+function Rx(a){const c=Math.cos(a),s=Math.sin(a),r=eye();r[5]=c;r[6]=-s;r[9]=s;r[10]=c;return r;}
+function Sc(s){const r=eye();r[0]=r[5]=r[10]=s;return r;}
+
+function up(pos,nrm,idx){
+  const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);
+  const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nrm),gl.STATIC_DRAW);
+  const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+  return{pb,nb,ib,n:idx.length};
+}
+
+// Geometries
+function gBox(s=.55){
+  const p=[],n=[],i=[];
+  const F=[[0,0,1],[0,0,-1],[0,1,0],[0,-1,0],[1,0,0],[-1,0,0]];
+  const U=[[0,1,0],[0,1,0],[0,0,-1],[0,0,1],[0,1,0],[0,1,0]];
+  let b=0;F.forEach(([nx,ny,nz],fi)=>{
+    const[ux,uy,uz]=U[fi],vx=ny*uz-nz*uy,vy=nz*ux-nx*uz,vz=nx*uy-ny*ux;
+    for(let a=-1;a<=1;a+=2)for(let c2=-1;c2<=1;c2+=2){p.push((nx+ux*a+vx*c2)*s,(ny+uy*a+vy*c2)*s,(nz+uz*a+vz*c2)*s);n.push(nx,ny,nz);}
+    i.push(b,b+1,b+2,b+1,b+3,b+2);b+=4;
+  });return up(p,n,i);
+}
+function gSph(r=.45,sg=14){
+  const p=[],n=[],i=[];
+  for(let y=0;y<=sg;y++){const phi=y/sg*Math.PI;for(let x=0;x<=sg;x++){const th=x/sg*Math.PI*2,bx=Math.sin(phi)*Math.cos(th),by=Math.cos(phi),bz=Math.sin(phi)*Math.sin(th);p.push(bx*r,by*r,bz*r);n.push(bx,by,bz);}}
+  for(let y=0;y<sg;y++)for(let x=0;x<sg;x++){const a=y*(sg+1)+x;i.push(a,a+1,a+sg+1,a+1,a+sg+2,a+sg+1);}
+  return up(p,n,i);
+}
+function gCyl(r=.28,h=.7,sg=14){
+  const p=[],n=[],i=[];let b=0;
+  // sides
+  for(let s=0;s<sg;s++){
+    const a0=s/sg*Math.PI*2,a1=(s+1)/sg*Math.PI*2;
+    const x0=Math.cos(a0)*r,z0=Math.sin(a0)*r,x1=Math.cos(a1)*r,z1=Math.sin(a1)*r;
+    p.push(x0,-h/2,z0,x1,-h/2,z1,x0,h/2,z0,x1,h/2,z1);
+    n.push(Math.cos(a0),0,Math.sin(a0),Math.cos(a1),0,Math.sin(a1),Math.cos(a0),0,Math.sin(a0),Math.cos(a1),0,Math.sin(a1));
+    i.push(b,b+1,b+2,b+1,b+3,b+2);b+=4;
+  }
+  // top cap
+  const tc=b;p.push(0,h/2,0);n.push(0,1,0);b++;
+  for(let s=0;s<sg;s++){p.push(Math.cos(s/sg*Math.PI*2)*r,h/2,Math.sin(s/sg*Math.PI*2)*r);n.push(0,1,0);}
+  for(let s=0;s<sg;s++)i.push(tc,tc+1+s,tc+1+(s+1)%sg);b+=sg;
+  // bot cap
+  const bc=b;p.push(0,-h/2,0);n.push(0,-1,0);b++;
+  for(let s=0;s<sg;s++){p.push(Math.cos(s/sg*Math.PI*2)*r,-h/2,Math.sin(s/sg*Math.PI*2)*r);n.push(0,-1,0);}
+  for(let s=0;s<sg;s++)i.push(bc,bc+1+(s+1)%sg,bc+1+s);
+  return up(p,n,i);
+}
+function gPyr(){
+  const p=[],n=[],i=[];let b=0;
+  const sg=5,h=.85,r=.42;
+  for(let s=0;s<sg;s++){
+    const a0=s/sg*Math.PI*2,a1=(s+1)/sg*Math.PI*2;
+    const x0=Math.cos(a0)*r,z0=Math.sin(a0)*r,x1=Math.cos(a1)*r,z1=Math.sin(a1)*r;
+    p.push(x0,-h/2,z0,x1,-h/2,z1,0,h/2,0);
+    const nx=z1-z0,nz=-(x1-x0),l=Math.hypot(nx,.5,nz)||1;
+    n.push(nx/l,.5/l,nz/l,nx/l,.5/l,nz/l,nx/l,.5/l,nz/l);
+    i.push(b,b+1,b+2);b+=3;
+  }
+  return up(p,n,i);
+}
+function gTor(R=.35,r=.13,sg=13,rn=20){
+  const p=[],n=[],i=[];
+  for(let j=0;j<=rn;j++){const phi=j/rn*Math.PI*2;for(let s=0;s<=sg;s++){const th=s/sg*Math.PI*2,cx=(R+r*Math.cos(th))*Math.cos(phi),cy=r*Math.sin(th),cz=(R+r*Math.cos(th))*Math.sin(phi);p.push(cx,cy,cz);n.push(Math.cos(th)*Math.cos(phi),Math.sin(th),Math.cos(th)*Math.sin(phi));}}
+  for(let j=0;j<rn;j++)for(let s=0;s<sg;s++){const a=j*(sg+1)+s;i.push(a,a+1,a+sg+1,a+1,a+sg+2,a+sg+1);}
+  return up(p,n,i);
+}
+function gGem(){
+  const p=[],n=[],i=[];let b=0;
+  function tri(A,B,C){const ax=B[0]-A[0],ay=B[1]-A[1],az=B[2]-A[2],bx=C[0]-A[0],by=C[1]-A[1],bz=C[2]-A[2];const nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,l=Math.hypot(nx,ny,nz)||1;p.push(...A,...B,...C);n.push(nx/l,ny/l,nz/l,nx/l,ny/l,nz/l,nx/l,ny/l,nz/l);i.push(b,b+1,b+2);b+=3;}
+  const T=[0,.6,0],Bo=[0,-.48,0];
+  const r1=[[.4,.08,0],[.12,.08,.38],[-.32,.08,.24],[-.32,.08,-.24],[.12,.08,-.38]];
+  const r2=[[.26,-.14,0],[.08,-.14,.25],[-.21,-.14,.16],[-.21,-.14,-.16],[.08,-.14,-.25]];
+  for(let s=0;s<5;s++){const ns=(s+1)%5;tri(T,r1[s],r1[ns]);tri(r1[s],r2[ns],r1[ns]);tri(r1[s],r2[s],r2[ns]);tri(r2[s],Bo,r2[ns]);}
+  return up(p,n,i);
+}
+function gStar(){
+  // 6-pointed star / spiky shape
+  const p=[],n=[],i=[];let b=0;
+  function tri(A,B,C){const ax=B[0]-A[0],ay=B[1]-A[1],az=B[2]-A[2],bx=C[0]-A[0],by=C[1]-A[1],bz=C[2]-A[2];const nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,l=Math.hypot(nx,ny,nz)||1;p.push(...A,...B,...C);n.push(nx/l,ny/l,nz/l,nx/l,ny/l,nz/l,nx/l,ny/l,nz/l);i.push(b,b+1,b+2);b+=3;}
+  const pts=6,R=.45,r=.18,h=.15;
+  const top=[0,h,0],bot=[0,-h,0];
+  for(let s=0;s<pts;s++){
+    const a0=s/pts*Math.PI*2,a1=(s+.5)/pts*Math.PI*2,a2=(s+1)/pts*Math.PI*2;
+    const ox=Math.cos(a0)*R,oz=Math.sin(a0)*R;
+    const ix=Math.cos(a1)*r,iz=Math.sin(a1)*r;
+    const ox2=Math.cos(a2)*R,oz2=Math.sin(a2)*R;
+    tri(top,[ox,0,oz],[ix,0,iz]);
+    tri(top,[ix,0,iz],[ox2,0,oz2]);
+    tri(bot,[ix,0,iz],[ox,0,oz]);
+    tri(bot,[ox2,0,oz2],[ix,0,iz]);
+  }
+  return up(p,n,i);
+}
+function gCone(r=.38,h=.75,sg=14){
+  const p=[],n=[],i=[];let b=0;
+  for(let s=0;s<sg;s++){
+    const a0=s/sg*Math.PI*2,a1=(s+1)/sg*Math.PI*2;
+    const x0=Math.cos(a0)*r,z0=Math.sin(a0)*r,x1=Math.cos(a1)*r,z1=Math.sin(a1)*r;
+    const sl=Math.hypot(r,h);
+    p.push(x0,-h/2,z0,x1,-h/2,z1,0,h/2,0);
+    const nx0=Math.cos(a0)*h/sl,nz0=Math.sin(a0)*h/sl,ny=r/sl;
+    n.push(nx0,ny,nz0,Math.cos(a1)*h/sl,ny,Math.sin(a1)*h/sl,0,1,0);
+    i.push(b,b+1,b+2);b+=3;
+  }
+  // base cap
+  const bc=b;p.push(0,-h/2,0);n.push(0,-1,0);b++;
+  for(let s=0;s<sg;s++){p.push(Math.cos(s/sg*Math.PI*2)*r,-h/2,Math.sin(s/sg*Math.PI*2)*r);n.push(0,-1,0);}
+  for(let s=0;s<sg;s++)i.push(bc,bc+1+(s+1)%sg,bc+1+s);
+  return up(p,n,i);
+}
+function gRing(R=.38,r=.12,sg=12,rn=18){return gTor(R,r,sg,rn);}
+
+const MESH={box:gBox(),sphere:gSph(),cyl:gCyl(),pyramid:gPyr(),torus:gTor(),gem:gGem(),star:gStar(),cone:gCone(),ring:gRing()};
+const PROJ=persp(55,CW/CH,.1,100);
+
+function drawObj(o,t){
+  const M=mul(mul(mul(T(o.x,o.y,o.z),Ry(o.ry)),Rx(o.rx)),Sc(o.scale));
+  const MVP=mul(PROJ,M);
+  gl.uniformMatrix4fv(L.uM,false,M);
+  gl.uniformMatrix4fv(L.uV,false,MVP);
+  gl.uniform3fv(L.uC,o.col);
+  gl.uniform1f(L.uS,o===SEL?1:0);
+  gl.uniform1f(L.uT,t);
+  const mesh=MESH[o.type]||MESH.box;
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.pb);gl.enableVertexAttribArray(L.aP);gl.vertexAttribPointer(L.aP,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.nb);gl.enableVertexAttribArray(L.aN);gl.vertexAttribPointer(L.aN,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.ib);gl.drawElements(gl.TRIANGLES,mesh.n,gl.UNSIGNED_SHORT,0);
+}
+
+// Project 3D→2D
+function toSc(x,y,z){
+  const f=1/Math.tan(55*Math.PI/360),asp=CW/CH;
+  return{x:(x*f/asp/(-z)+1)/2*CW, y:(-y*f/(-z)+1)/2*CH};
+}
+
+// ═══════════════════════════════════════════════════════
+//  SKELETON
+// ═══════════════════════════════════════════════════════
+const ch=$('ch');
+ch.width=CW;ch.height=CH;
+const hx=ch.getContext('2d');
+const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+
+function drawHand(lm){
+  hx.clearRect(0,0,CW,CH);
+  // Mirror x to match CSS-flipped video
+  const pts=lm.map(p=>({x:(1-p.x)*CW,y:p.y*CH}));
+  BONES.forEach(([a,b])=>{
+    hx.beginPath();hx.moveTo(pts[a].x,pts[a].y);hx.lineTo(pts[b].x,pts[b].y);
+    hx.strokeStyle='rgba(0,255,231,.4)';hx.lineWidth=2.5;hx.stroke();
+  });
+  pts.forEach((pt,i)=>{
+    const tip=[4,8,12,16,20].includes(i);
+    hx.beginPath();hx.arc(pt.x,pt.y,tip?6:3.5,0,Math.PI*2);
+    hx.fillStyle=i===8?'#00ffe7':i===4?'#ff6b00':tip?'#fff':'rgba(0,255,231,.55)';
+    hx.fill();
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  GESTURE DETECTION
+//  Повертає тільки чіткі жести, інакше 'idle'
+// ═══════════════════════════════════════════════════════
+function isUp(tip,base){return tip.y<base.y-0.06;}
+
+function getGest(lm){
+  const eI=isUp(lm[8],lm[5]);
+  const eM=isUp(lm[12],lm[9]);
+  const eR=isUp(lm[16],lm[13]);
+  const eP=isUp(lm[20],lm[17]);
+  const pd=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y,(lm[4].z||0)-(lm[8].z||0));
+
+  // Тільки дуже чіткі жести
+  if(eI&&eM&&eR&&eP)         return 'open';   // ✋ всі 4 пальці
+  if(eI&&eM&&!eR&&!eP)       return 'two';    // ✌️ 2 пальці
+  if(eI&&!eM&&!eR&&!eP)      return 'point';  // ☝️ 1 палець
+  if(pd<0.06&&!eM&&!eR&&!eP) return 'pinch';  // 🤏 щипок
+  return 'idle'; // все інше = нічого не робимо
+}
+
+// ═══════════════════════════════════════════════════════
+//  ОБРОБКА ЖЕСТІВ
+//  КЛЮЧОВЕ ПРАВИЛО: SEL ніколи не скидається при жестах!
+//  Тільки явна кнопка може скинути SEL.
+// ═══════════════════════════════════════════════════════
+let grabbing=false,pinching=false;
+
+function handleGest(g,lm){
+  // Прогрів — перші 20 кадрів ігноруємо все
+  if(handWarmup<20){handWarmup++;return;}
+
+  // Курсор
+  const cur=$('cur');
+  cur.style.display='block';
+  cur.style.left=curX+'px';
+  cur.style.top=curY+'px';
+  cur.className=g==='two'||g==='pinch'?'g':'';
+
+  // Відкрита долоня — тримати 30 кадрів щоб відкрити панель
+  if(g==='open'){
+    openHoldF++;
+    if(openHoldF===30){openPanel();showFlash('✋');}
+  } else {
+    openHoldF=0;
+  }
+
+  // ── ☝️ POINT: вибрати предмет під пальцем ────────────
+  if(g==='point'){
+    // Шукаємо предмет під курсором
+    const hit=hitTest(curX,curY);
+    if(hit && hit!==SEL){
+      SEL=hit;
+      showFlash('☝️');
+      updateModeInfo();
+    }
+    // Панель
+    if(panelOpen) doPanelHover(curX,curY);
+  }
+
+  // ── ✌️ TWO: рухати вибраний предмет ──────────────────
+  // Важливо: SEL береться таким яким є, не скидається
+  if(g==='two'){
+    if(!grabbing){
+      // Починаємо хват — запам'ятовуємо де палець і де предмет
+      grabAX=curX; grabAY=curY;
+      if(SEL){grabOX=SEL.x; grabOY=SEL.y;}
+      grabbing=true;
+    }
+    if(SEL){
+      const depth=-SEL.z; // позитивне число
+      SEL.x=grabOX+(curX-grabAX)*depth*1.6/CW;
+      SEL.y=grabOY-(curY-grabAY)*depth*1.6/CH;
+    }
+  } else {
+    // Виходимо з two — заморожуємо на місці
+    if(grabbing&&SEL){
+      grabOX=SEL.x; grabOY=SEL.y;
+    }
+    grabbing=false;
+  }
+
+  // ── 🤏 PINCH: масштаб ─────────────────────────────────
+  if(g==='pinch'&&SEL){
+    const tx=(1-lm[4].x)*CW, ty=lm[4].y*CH;
+    const d=Math.hypot(tx-curX,ty-curY);
+    if(!pinching){pinchAD=Math.max(d,8);pinchAS=SEL.scale;pinching=true;}
+    SEL.scale=Math.max(.1,Math.min(5,pinchAS*(d/pinchAD)));
+  } else {
+    pinching=false;
+  }
+
+  // Оновити кільце
+  if(SEL) ringUpdate();
+
+  // HUD
+  const labels={point:'☝️ ВИБІР',two:'✌️ РУХ',pinch:'🤏 МАСШТАБ',open:'✋ ПАНЕЛЬ',idle:'◈ СТЕЖУ'};
+  $('gl').textContent=labels[g]||'◈';
+  updateModeInfo();
+}
+
+function hitTest(scx,scy){
+  let best=null,bd=Infinity;
+  objs.forEach(o=>{
+    const sp=toSc(o.x,o.y,o.z);
+    const r=Math.max(35,80/(-o.z)*o.scale);
+    const d=Math.hypot(sp.x-scx,sp.y-scy);
+    if(d<r&&(-o.z)<bd){bd=-o.z;best=o;}
+  });
+  return best;
+}
+
+function ringUpdate(){
+  if(!SEL){ringHide();return;}
+  const sp=toSc(SEL.x,SEL.y,SEL.z);
+  const r=Math.max(25,75/(-SEL.z)*SEL.scale);
+  const rg=$('ring');
+  rg.style.display='block';
+  rg.style.left=(sp.x-r)+'px';rg.style.top=(sp.y-r)+'px';
+  rg.style.width=rg.style.height=(r*2)+'px';
+}
+function ringHide(){$('ring').style.display='none';}
+
+function updateModeInfo(){
+  const m=grabbing?'РУХ':pinching?'МАСШТАБ':SEL?'ВИБРАНО: '+SEL.type.toUpperCase():'ПЕРЕГЛЯД';
+  $('modeinfo').textContent='РЕЖИМ: '+m;
+}
+
+// ── Панель ────────────────────────────────────────────
+function buildPanel(){
+  const panel=$('panel');
+  panel.innerHTML='<div id="ptit">ПРЕДМЕТИ</div>';
+  CAT.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className='pi';
+    d.style.background=`rgba(${c.c.map(v=>Math.round(v*50)).join(',')},0.7)`;
+    d.innerHTML=`<span>${c.e}</span><small>${c.n}</small><div class="pb"></div>`;
+    d.onclick=()=>spawnItem(i);
+    panel.appendChild(d);
+  });
+}
+function openPanel(){panelOpen=true;$('panel').classList.add('open');}
+function closePanel(){panelOpen=false;$('panel').classList.remove('open');panHovIdx=-1;panHovF=0;}
+function doPanelHover(scx,scy){
+  const items=document.querySelectorAll('.pi');
+  let found=-1;
+  items.forEach((el,i)=>{
+    const r=el.getBoundingClientRect();
+    const hit=scx>=r.left&&scx<=r.right&&scy>=r.top&&scy<=r.bottom;
+    el.classList.toggle('hov',hit);
+    const bar=el.querySelector('.pb');
+    if(bar)bar.style.width=(hit&&i===panHovIdx)?Math.min(100,panHovF/DWELL*100)+'%':'0%';
+    if(hit)found=i;
+  });
+  if(found!==-1){
+    if(found===panHovIdx){panHovF++;if(panHovF>=DWELL){spawnItem(found);panHovF=0;}}
+    else{panHovIdx=found;panHovF=0;}
+  } else{panHovIdx=-1;panHovF=0;}
+}
+
+function spawnItem(i){
+  const c=CAT[i];
+  // Spawn перед камерою трохи лівіше центру щоб було видно
+  const o=mkObj(c.type,0,0,-8,c.c);
+  objs.push(o);
+  // Зберігаємо SEL — НЕ скидаємо старий вибір автоматично
+  // Просто вибираємо новий
+  SEL=o;
+  closePanel();
+  showFlash(c.e);
+  updateModeInfo();
+  // Скидаємо стан хвату щоб не "підхопити" старі координати
+  grabbing=false; pinching=false;
+  grabOX=o.x; grabOY=o.y;
+}
+
+function deselectObj(){SEL=null;grabbing=false;pinching=false;ringHide();updateModeInfo();}
+function clearScene(){initScene();ringHide();showFlash('🗑️');updateModeInfo();}
+
+function showFlash(e){
+  const el=$('fl');el.textContent=e;el.style.opacity='1';
+  clearTimeout(flashTmr);flashTmr=setTimeout(()=>el.style.opacity='0',700);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MEDIAPIPE
+// ═══════════════════════════════════════════════════════
+let mpH,mpCam;
+async function startGame(){
+  $('boot').style.display='none';
+  $('load').style.display='flex';
+  setBar(8);initScene();buildPanel();
+
+  const vid=$('vid');
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+    vid.srcObject=stream;
+    await new Promise(r=>vid.onloadedmetadata=r);
+    vid.play();
+  }catch(e){
+    alert('❌ Потрібен дозвіл на камеру!\nПотрібен HTTPS або localhost.\n\n'+e.message);
+    $('load').style.display='none';$('boot').style.display='flex';return;
+  }
+  setBar(40);$('lmsg').textContent='ЗАВАНТАЖЕННЯ MEDIAPIPE...';
+
+  mpH=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  mpH.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.75,minTrackingConfidence:.7});
+  mpH.onResults(onHandResults);
+  setBar(72);$('lmsg').textContent='ЗАПУСК КАМЕРИ...';
+
+  mpCam=new Camera(vid,{onFrame:async()=>{await mpH.send({image:vid});},width:640,height:480});
+  await mpCam.start();
+  setBar(100);
+
+  setTimeout(()=>{
+    $('load').style.display='none';
+    $('game').style.display='block';
+    curX=CW/2;curY=CH/2;
+    renderLoop();
+  },500);
+}
+function setBar(v){$('bp').style.width=v+'%';}
+
+// ─── Головний callback від MediaPipe ───────────────────
+function onHandResults(res){
+  // Очищаємо скелет
+  hx.clearRect(0,0,CW,CH);
+
+  if(!res.multiHandLandmarks||!res.multiHandLandmarks.length){
+    // Рука зникла — ховаємо курсор, але SEL та objs не чіпаємо!
+    $('cur').style.display='none';
+    $('gl').textContent='◈ ПОКАЖИ РУКУ';
+    handWarmup=0; // скидаємо прогрів
+    grabbing=false; pinching=false; openHoldF=0;
+    // Оновлення grab anchor при поверненні руки
+    if(SEL){grabOX=SEL.x;grabOY=SEL.y;}
+    return;
+  }
+
+  const lm=res.multiHandLandmarks[0];
+  drawHand(lm);
+
+  // Позиція вказівного пальця (дзеркально)
+  const rx=(1-lm[8].x)*CW;
+  const ry=lm[8].y*CH;
+  // Плавне згладжування
+  curX+=(rx-curX)*0.35;
+  curY+=(ry-curY)*0.35;
+
+  const g=getGest(lm);
+  prevG=g;
+  handleGest(g,lm);
+}
+
+// ─── Рендер цикл ───────────────────────────────────────
+function renderLoop(){
+  requestAnimationFrame(renderLoop);
+  aT=performance.now()/1000;
+
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+
+  objs.forEach(o=>{
+    if(o!==SEL)o.ry+=.006;
+    drawObj(o,aT);
+  });
+
+  if(SEL)ringUpdate();
+
+  fc++;
+  if(aT-fpt>1){$('fps').textContent=fc+' FPS';fc=0;fpt=aT;}
+  $('ol').textContent=objs.length+' OBJ';
+}
+
+// Клавіатура для тесту на ПК
+window.addEventListener('keydown',e=>{
+  if(e.key==='p')openPanel();
+  if(e.key==='Escape'){closePanel();deselectObj();}
+  if(SEL){
+    if(e.key==='ArrowLeft')SEL.ry-=.12;
+    if(e.key==='ArrowRight')SEL.ry+=.12;
+    if(e.key==='ArrowUp')SEL.z-=.15;
+    if(e.key==='ArrowDown')SEL.z+=.15;
+    if(e.key==='+')SEL.scale=Math.min(5,SEL.scale+.1);
+    if(e.key==='-')SEL.scale=Math.max(.1,SEL.scale-.1);
+  }
+});
+</script>
+</body>
+</html>
