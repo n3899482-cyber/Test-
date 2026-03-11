@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Hand VR Sandbox</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#060c12; overflow:hidden; font-family:'Courier New',monospace; }
+
+#boot {
+  position:fixed; inset:0; background:#060c12;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  z-index:999; gap:16px; padding:28px;
+}
+#boot h1 { font-size:clamp(26px,7vw,46px); color:#00ffe7; letter-spacing:8px;
+  text-shadow:0 0 40px #00ffe7; animation:glow 2s ease-in-out infinite; }
+@keyframes glow { 0%,100%{text-shadow:0 0 20px #00ffe7}50%{text-shadow:0 0 60px #00ffe7} }
+#boot p { color:rgba(255,255,255,.45); font-size:13px; letter-spacing:1.5px;
+  text-align:center; max-width:300px; line-height:1.9; }
+.glist { display:flex; flex-direction:column; gap:7px; }
+.grow { display:flex; align-items:center; gap:10px; font-size:12px; color:rgba(255,255,255,.5); }
+.gico { font-size:19px; width:26px; }
+.gname { color:#00ffe7; margin-right:4px; }
+#startbtn {
+  background:transparent; border:1.5px solid #00ffe7; color:#00ffe7;
+  font-size:14px; letter-spacing:5px; padding:14px 40px; border-radius:3px;
+  cursor:pointer; transition:.3s; font-family:inherit;
+}
+#startbtn:hover { background:#00ffe7; color:#000; }
+
+#loading {
+  position:fixed; inset:0; background:rgba(6,12,18,.95);
+  display:none; flex-direction:column; align-items:center;
+  justify-content:center; z-index:998; gap:14px;
+}
+#loading p { color:#00ffe7; letter-spacing:3px; font-size:12px; }
+#barwrap { width:200px; height:2px; background:rgba(255,255,255,.1); border-radius:2px; }
+#bar { height:100%; background:#00ffe7; border-radius:2px; width:0; transition:width .3s; }
+
+#game { position:fixed; inset:0; display:none; }
+
+/* Video full-screen, CSS-mirrored */
+#vid {
+  position:fixed; inset:0; width:100%; height:100%;
+  object-fit:cover; transform:scaleX(-1);
+  z-index:0; opacity:.28;
+}
+
+/* 3D canvas — pixel size set once in JS, no CSS stretching */
+#c3d {
+  position:fixed; top:0; left:0;
+  z-index:1; pointer-events:none;
+  /* No width/height here — set by JS */
+}
+
+/* Hand skeleton canvas — same */
+#chand {
+  position:fixed; top:0; left:0;
+  z-index:2; pointer-events:none;
+  /* No width/height here — set by JS */
+}
+
+#dot {
+  position:fixed; z-index:10; pointer-events:none; display:none;
+  width:22px; height:22px; margin:-11px 0 0 -11px;
+  border-radius:50%; border:2px solid #00ffe7;
+  box-shadow:0 0 14px #00ffe7;
+  transition:border-color .1s, box-shadow .1s, transform .07s;
+}
+#dot.grab  { border-color:#ff6b00; box-shadow:0 0 18px #ff6b00; transform:scale(1.5); }
+#dot.pinch { border-color:#ffcc00; box-shadow:0 0 18px #ffcc00; transform:scale(1.2); }
+#dot.open  { border-color:#ff2d55; box-shadow:0 0 18px #ff2d55; }
+
+#hud {
+  position:fixed; top:0; left:0; right:0; z-index:20;
+  padding:12px 16px;
+  background:linear-gradient(to bottom, rgba(0,0,0,.6) 0%, transparent 100%);
+  display:flex; justify-content:space-between; align-items:flex-start;
+  pointer-events:none;
+}
+#glabel { color:#00ffe7; font-size:11px; letter-spacing:3px; text-shadow:0 0 10px #00ffe7; }
+#hright { text-align:right; }
+#olabel { color:rgba(255,255,255,.3); font-size:10px; letter-spacing:2px; }
+#flabel { color:rgba(255,255,255,.2); font-size:9px; }
+
+#flash {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  font-size:clamp(60px,14vw,96px); z-index:30; pointer-events:none;
+  opacity:0; transition:opacity .15s;
+}
+
+#panel {
+  position:fixed; right:12px; top:50%; transform:translateY(-50%);
+  z-index:25; display:none; flex-direction:column; gap:8px;
+  background:rgba(4,10,20,.9); border:1px solid rgba(0,255,231,.18);
+  border-radius:14px; padding:12px 9px; backdrop-filter:blur(14px);
+}
+#panel.open { display:flex; }
+#ptitle { color:rgba(255,255,255,.25); font-size:8px; letter-spacing:3px;
+  text-align:center; margin-bottom:2px; }
+.pitem {
+  width:58px; height:58px; border-radius:10px;
+  border:1px solid rgba(255,255,255,.1);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  cursor:pointer; gap:3px; position:relative; overflow:hidden; transition:.2s;
+}
+.pitem.hov { border-color:#00ffe7; box-shadow:0 0 12px rgba(0,255,231,.3); transform:scale(1.08); }
+.pitem span { font-size:20px; }
+.pitem small { font-size:7px; letter-spacing:1px; color:rgba(255,255,255,.4); }
+.pbar { position:absolute; bottom:0; left:0; height:2px; background:#00ffe7; width:0; }
+
+#btns {
+  position:fixed; bottom:0; left:0; right:0; z-index:20;
+  padding:8px 14px 18px;
+  background:linear-gradient(to top, rgba(0,0,0,.65), transparent);
+  display:flex; justify-content:center; gap:10px;
+}
+.btn {
+  background:rgba(0,255,231,.07); border:1px solid rgba(0,255,231,.2);
+  color:#00ffe7; font-size:10px; letter-spacing:2px; padding:8px 16px;
+  border-radius:25px; cursor:pointer; font-family:inherit; transition:.2s;
+}
+.btn:hover { background:rgba(0,255,231,.18); }
+.btn.red { border-color:rgba(255,45,85,.25); color:#ff2d55; background:rgba(255,45,85,.07); }
+
+#sring {
+  position:fixed; z-index:9; pointer-events:none; display:none;
+  border:1.5px solid #00ffe7; border-radius:50%;
+  box-shadow:0 0 10px rgba(0,255,231,.4);
+  animation:rpulse 1.2s ease-in-out infinite;
+}
+@keyframes rpulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <h1>◈ HAND VR ◈</h1>
+  <p>Керуй 3D предметами рукою через камеру</p>
+  <div class="glist">
+    <div class="grow"><span class="gico">☝️</span><span><span class="gname">ВКАЗІВНИЙ</span>наведи → вибери</span></div>
+    <div class="grow"><span class="gico">✌️</span><span><span class="gname">ДВА ПАЛЬЦІ</span>схопи і рухай</span></div>
+    <div class="grow"><span class="gico">🤏</span><span><span class="gname">ЩИПОК</span>змінити розмір</span></div>
+    <div class="grow"><span class="gico">✋</span><span><span class="gname">ДОЛОНЯ</span>панель предметів</span></div>
+    <div class="grow"><span class="gico">👊</span><span><span class="gname">КУЛАК</span>відпустити</span></div>
+  </div>
+  <button id="startbtn" onclick="boot()">▶ УВІМКНУТИ КАМЕРУ</button>
+</div>
+
+<div id="loading">
+  <p id="lmsg">ІНІЦІАЛІЗАЦІЯ...</p>
+  <div id="barwrap"><div id="bar"></div></div>
+</div>
+
+<div id="game">
+  <video id="vid" autoplay playsinline muted></video>
+  <canvas id="c3d"></canvas>
+  <canvas id="chand"></canvas>
+  <div id="dot"></div>
+  <div id="flash"></div>
+  <div id="sring"></div>
+  <div id="hud">
+    <div id="glabel">◈ ПОКАЖИ РУКУ</div>
+    <div id="hright"><div id="olabel">– OBJ</div><div id="flabel">– FPS</div></div>
+  </div>
+  <div id="panel"><div id="ptitle">ПРЕДМЕТИ</div></div>
+  <div id="btns">
+    <button class="btn" onclick="togglePanel()">✋ ПАНЕЛЬ</button>
+    <button class="btn" onclick="deselect()">○ ЗНЯТИ ВИБІР</button>
+    <button class="btn red" onclick="clearAll()">✕ ОЧИСТИТИ</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════
+//  HAND VR SANDBOX
+//  KEY FIX: canvas pixel dimensions are set ONCE at boot.
+//  We NEVER assign canvas.width or canvas.height again
+//  during the render loop — doing so destroys all WebGL
+//  buffers and makes every object disappear after 1 frame.
+// ═══════════════════════════════════════════════════════
+
+// ── Helpers ──────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const CW = () => c3d.width;    // canvas pixel width  (fixed)
+const CH = () => c3d.height;   // canvas pixel height (fixed)
+
+// ── Catalog ──────────────────────────────────────────
+const CAT = [
+  { type:'box',     e:'📦', n:'КУБ',     c:[.9,.35,.2]  },
+  { type:'sphere',  e:'🔵', n:'КУЛЯ',    c:[.2,.55,.95] },
+  { type:'cyl',     e:'🔷', n:'ЦИЛІН',   c:[.2,.85,.45] },
+  { type:'pyramid', e:'🔺', n:'ПІРА',    c:[.95,.78,.1] },
+  { type:'torus',   e:'⭕', n:'ТОРОЇД',  c:[.75,.2,.95] },
+  { type:'gem',     e:'💎', n:'КРИСТ',   c:[.5,.9,1.0]  },
+];
+
+// ── Scene ─────────────────────────────────────────────
+let objs = [], sel = null;
+let panelOpen = false, panelHoverIdx = -1, panelHoverF = 0;
+const DWELL = 28;
+
+// ── Hand state ────────────────────────────────────────
+let gest = 'none', prevGest = 'none', gestF = 0;
+// Smooth fingertip (screen pixels, already mirrored)
+let sx = 0, sy = 0;
+// Grab anchor
+let grabAX = 0, grabAY = 0, grabOX = 0, grabOY = 0, grabbing = false;
+// Pinch anchor
+let pinchAD = 0, pinchAS = 1, pinching = false;
+let throwCD = 0;
+let spawnCD = 0;  // cooldown after spawn — ignore fist for N frames
+// FPS
+let fc = 0, fpt = 0, animT = 0;
+let flashTmr = null;
+
+// ── Init scene ────────────────────────────────────────
+function mkObj(type, x, y, z, col) {
+  return { type, x, y, z, col:[...col], scale:1.0,
+           ry:Math.random()*Math.PI*2, rx:0 };
+}
+function initScene() {
+  // Objects placed at z=-8 to -10 so they all fit on screen without clipping
+  objs = [
+    mkObj('box',     -0.8,  0.0, -8,  [.9,.35,.2]),
+    mkObj('sphere',   0.4,  0.0, -8,  [.2,.55,.95]),
+    mkObj('cyl',      1.2,  0.0, -8,  [.2,.85,.45]),
+    mkObj('pyramid', -1.2,  0.0, -9,  [.95,.78,.1]),
+    mkObj('torus',    0.0,  0.0, -9,  [.75,.2,.95]),
+    mkObj('gem',      1.2,  0.0, -9,  [.5,.9,1.0]),
+  ];
+  sel = null; grabbing = false; pinching = false;
+  spawnCD = 0; throwCD = 0;
+}
+
+// ═══════════════════════════════════════════════════════
+//  WebGL — set up once, NEVER touch canvas size again
+// ═══════════════════════════════════════════════════════
+const c3d = $('c3d');
+// Set pixel size ONCE — use screen size capped to avoid too-large buffers on high-DPI
+// Do NOT use devicePixelRatio here — keep 1:1 CSS pixel mapping for simplicity
+c3d.width  = window.innerWidth;
+c3d.height = window.innerHeight;
+// CSS already sets width/height:100% so it fills screen
+
+const gl = c3d.getContext('webgl', { antialias:true, alpha:true, premultipliedAlpha:false });
+gl.clearColor(0, 0, 0, 0);   // transparent so video shows through
+gl.viewport(0, 0, c3d.width, c3d.height);
+
+// ── Shaders ───────────────────────────────────────────
+const VS = `
+  attribute vec3 aPos, aNrm;
+  uniform mat4 uMVP, uMod;
+  varying vec3 vN, vW;
+  void main() {
+    vN = (uMod * vec4(aNrm, 0.0)).xyz;
+    vW = (uMod * vec4(aPos, 1.0)).xyz;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+  }
+`;
+const FS = `
+  precision mediump float;
+  varying vec3 vN, vW;
+  uniform vec3  uCol;
+  uniform float uSel, uTime;
+  void main() {
+    vec3  L    = normalize(vec3(2.0, 5.0, 3.0) - vW);
+    float diff = max(dot(normalize(vN), L), 0.0) * 0.75 + 0.25;
+    vec3  col  = uCol * diff;
+    if (uSel > 0.5) {
+      float p = sin(uTime * 5.0) * 0.35 + 0.65;
+      col = mix(col, vec3(0.0, 1.0, 0.88), 0.28 * p)
+          + vec3(0.0, 1.0, 0.88) * 0.12 * p;
+    }
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+function mkShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s); return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, mkShader(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+
+const LOC = {
+  aPos: gl.getAttribLocation(prog,  'aPos'),
+  aNrm: gl.getAttribLocation(prog,  'aNrm'),
+  uMVP: gl.getUniformLocation(prog, 'uMVP'),
+  uMod: gl.getUniformLocation(prog, 'uMod'),
+  uCol: gl.getUniformLocation(prog, 'uCol'),
+  uSel: gl.getUniformLocation(prog, 'uSel'),
+  uTim: gl.getUniformLocation(prog, 'uTime'),
+};
+
+// ── Matrix math ───────────────────────────────────────
+function m4()  { return new Float32Array(16); }
+function eye() { const m=m4(); m[0]=m[5]=m[10]=m[15]=1; return m; }
+function mul4(a, b) {
+  const r = m4();
+  for (let i=0;i<4;i++) for (let j=0;j<4;j++) {
+    let s=0; for (let k=0;k<4;k++) s+=a[i*4+k]*b[k*4+j];
+    r[i*4+j]=s;
+  }
+  return r;
+}
+function perspective(fovDeg, asp, near, far) {
+  const f = 1/Math.tan(fovDeg*Math.PI/360), r=m4();
+  r[0]=f/asp; r[5]=f;
+  r[10]=(far+near)/(near-far); r[11]=-1;
+  r[14]=(2*far*near)/(near-far);
+  return r;
+}
+function translation(tx,ty,tz) { const r=eye(); r[12]=tx;r[13]=ty;r[14]=tz; return r; }
+function rotationY(a) { const c=Math.cos(a),s=Math.sin(a),r=eye(); r[0]=c;r[2]=s;r[8]=-s;r[10]=c; return r; }
+function rotationX(a) { const c=Math.cos(a),s=Math.sin(a),r=eye(); r[5]=c;r[6]=-s;r[9]=s;r[10]=c; return r; }
+function scaling(s) { const r=eye(); r[0]=r[5]=r[10]=s; return r; }
+
+// ── Upload geometry buffer ─────────────────────────────
+function upload(pos, nrm, idx) {
+  const pb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+  const nb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, nb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nrm), gl.STATIC_DRAW);
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+  return { pb, nb, ib, count: idx.length };
+}
+
+// ── Geometry builders ─────────────────────────────────
+function buildBox(sx=.6,sy=.6,sz=.6) {
+  const p=[],n=[],idx=[];
+  const F=[[0,0,1],[0,0,-1],[0,1,0],[0,-1,0],[1,0,0],[-1,0,0]];
+  const U=[[0,1,0],[0,1,0],[0,0,-1],[0,0,1],[0,1,0],[0,1,0]];
+  let b=0;
+  F.forEach(([nx,ny,nz],fi)=>{
+    const[ux,uy,uz]=U[fi];
+    const vx=ny*uz-nz*uy,vy=nz*ux-nx*uz,vz=nx*uy-ny*ux;
+    for(let i=-1;i<=1;i+=2)for(let j=-1;j<=1;j+=2){
+      p.push((nx+ux*i+vx*j)*sx/2,(ny+uy*i+vy*j)*sy/2,(nz+uz*i+vz*j)*sz/2);
+      n.push(nx,ny,nz);
+    }
+    idx.push(b,b+1,b+2,b+1,b+3,b+2); b+=4;
+  });
+  return upload(p,n,idx);
+}
+function buildSphere(r=.42,seg=12) {
+  const p=[],n=[],idx=[];
+  for(let y=0;y<=seg;y++){const phi=y/seg*Math.PI;for(let x=0;x<=seg;x++){
+    const th=x/seg*Math.PI*2,bx=Math.sin(phi)*Math.cos(th),by=Math.cos(phi),bz=Math.sin(phi)*Math.sin(th);
+    p.push(bx*r,by*r,bz*r);n.push(bx,by,bz);
+  }}
+  for(let y=0;y<seg;y++)for(let x=0;x<seg;x++){const a=y*(seg+1)+x;idx.push(a,a+1,a+seg+1,a+1,a+seg+2,a+seg+1);}
+  return upload(p,n,idx);
+}
+function buildCyl(r=.27,h=.75,seg=12) {
+  const p=[],n=[],idx=[];
+  let base=0;
+  // Side faces
+  for(let i=0;i<seg;i++){
+    const a0=i/seg*Math.PI*2, a1=(i+1)/seg*Math.PI*2;
+    const x0=Math.cos(a0)*r,z0=Math.sin(a0)*r;
+    const x1=Math.cos(a1)*r,z1=Math.sin(a1)*r;
+    const nx0=Math.cos(a0),nz0=Math.sin(a0);
+    const nx1=Math.cos(a1),nz1=Math.sin(a1);
+    p.push(x0,-h/2,z0, x1,-h/2,z1, x0,h/2,z0, x1,h/2,z1);
+    n.push(nx0,0,nz0, nx1,0,nz1, nx0,0,nz0, nx1,0,nz1);
+    idx.push(base,base+1,base+2, base+1,base+3,base+2);
+    base+=4;
+  }
+  // Top cap
+  const topC=base; p.push(0,h/2,0); n.push(0,1,0); base++;
+  for(let i=0;i<seg;i++){
+    const a=i/seg*Math.PI*2,x=Math.cos(a)*r,z=Math.sin(a)*r;
+    p.push(x,h/2,z); n.push(0,1,0);
+  }
+  for(let i=0;i<seg;i++) idx.push(topC, topC+1+i, topC+1+(i+1)%seg);
+  base+=seg;
+  // Bottom cap
+  const botC=base; p.push(0,-h/2,0); n.push(0,-1,0); base++;
+  for(let i=0;i<seg;i++){
+    const a=i/seg*Math.PI*2,x=Math.cos(a)*r,z=Math.sin(a)*r;
+    p.push(x,-h/2,z); n.push(0,-1,0);
+  }
+  for(let i=0;i<seg;i++) idx.push(botC, botC+1+(i+1)%seg, botC+1+i);
+  return upload(p,n,idx);
+}
+function buildPyramid() {
+  const h=.9,r=.45,seg=5,p=[],n=[],idx=[];
+  for(let i=0;i<seg;i++){
+    const a0=i/seg*Math.PI*2,a1=(i+1)/seg*Math.PI*2;
+    const x0=Math.cos(a0)*r,z0=Math.sin(a0)*r,x1=Math.cos(a1)*r,z1=Math.sin(a1)*r;
+    p.push(x0,-h/2,z0,x1,-h/2,z1,0,h/2,0);
+    const nx=z1-z0,nz=-(x1-x0),l=Math.hypot(nx,.5,nz)||1;
+    n.push(nx/l,.5/l,nz/l,nx/l,.5/l,nz/l,nx/l,.5/l,nz/l);
+    const b=i*3;idx.push(b,b+1,b+2);
+  }
+  return upload(p,n,idx);
+}
+function buildTorus(R=.38,r=.14,seg=12,ring=20) {
+  const p=[],n=[],idx=[];
+  for(let j=0;j<=ring;j++){const phi=j/ring*Math.PI*2;for(let i=0;i<=seg;i++){
+    const th=i/seg*Math.PI*2;
+    const cx=(R+r*Math.cos(th))*Math.cos(phi),cy=r*Math.sin(th),cz=(R+r*Math.cos(th))*Math.sin(phi);
+    p.push(cx,cy,cz);n.push(Math.cos(th)*Math.cos(phi),Math.sin(th),Math.cos(th)*Math.sin(phi));
+  }}
+  for(let j=0;j<ring;j++)for(let i=0;i<seg;i++){const a=j*(seg+1)+i;idx.push(a,a+1,a+seg+1,a+1,a+seg+2,a+seg+1);}
+  return upload(p,n,idx);
+}
+function buildGem() {
+  const p=[],n=[],idx=[];
+  let b=0;
+  function tri(A,B,C){
+    const ax=B[0]-A[0],ay=B[1]-A[1],az=B[2]-A[2],bx=C[0]-A[0],by=C[1]-A[1],bz=C[2]-A[2];
+    const nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,l=Math.hypot(nx,ny,nz)||1;
+    const nv=[nx/l,ny/l,nz/l];
+    p.push(...A,...B,...C);n.push(...nv,...nv,...nv);idx.push(b,b+1,b+2);b+=3;
+  }
+  const T=[0,.65,0],Bo=[0,-.5,0];
+  const r1=[[.42,.08,0],[.13,.08,.40],[-.33,.08,.25],[-.33,.08,-.25],[.13,.08,-.40]];
+  const r2=[[.27,-.15,0],[.08,-.15,.26],[-.22,-.15,.17],[-.22,-.15,-.17],[.08,-.15,-.26]];
+  for(let i=0;i<5;i++){const ni=(i+1)%5;tri(T,r1[i],r1[ni]);tri(r1[i],r2[ni],r1[ni]);tri(r1[i],r2[i],r2[ni]);tri(r2[i],Bo,r2[ni]);}
+  return upload(p,n,idx);
+}
+
+// ── All meshes (created once, live forever in GPU memory) ──
+const MESH = {
+  box:     buildBox(),
+  sphere:  buildSphere(),
+  cyl:     buildCyl(),
+  pyramid: buildPyramid(),
+  torus:   buildTorus(),
+  gem:     buildGem(),
+};
+
+// ── Draw one object ────────────────────────────────────
+// PROJ is recomputed in drawObj using current canvas dimensions
+function drawObj(obj, t) {
+  const PROJ = perspective(55, c3d.width/c3d.height, 0.5, 100);
+  const M = mul4(mul4(mul4(translation(obj.x, obj.y, obj.z),
+                           rotationY(obj.ry)),
+                      rotationX(obj.rx)),
+                 scaling(obj.scale));
+  const MVP = mul4(PROJ, M);
+
+  gl.uniformMatrix4fv(LOC.uMVP, false, MVP);
+  gl.uniformMatrix4fv(LOC.uMod, false, M);
+  gl.uniform3fv(LOC.uCol, obj.col);
+  gl.uniform1f(LOC.uSel, obj === sel ? 1.0 : 0.0);
+  gl.uniform1f(LOC.uTim, t);
+
+  const mesh = MESH[obj.type] || MESH.box;
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.pb);
+  gl.enableVertexAttribArray(LOC.aPos);
+  gl.vertexAttribPointer(LOC.aPos, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.nb);
+  gl.enableVertexAttribArray(LOC.aNrm);
+  gl.vertexAttribPointer(LOC.aNrm, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ib);
+  gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+}
+
+// ── Project 3D world → 2D screen ──────────────────────
+function toScreen(wx, wy, wz) {
+  // Use same FOV as PROJ
+  const f   = 1/Math.tan(55*Math.PI/360);
+  const asp = c3d.width/c3d.height;
+  const ndcX =  wx * f / asp / (-wz);
+  const ndcY = -wy * f        / (-wz);
+  return { x: (ndcX+1)/2*c3d.width, y: (1-ndcY)/2*c3d.height };
+}
+
+// ═══════════════════════════════════════════════════════
+//  HAND SKELETON
+//  Mirror x in JS: screenX = (1 - lm.x) * canvasWidth
+//  so it matches the CSS-mirrored video feed
+// ═══════════════════════════════════════════════════════
+const chand = $('chand');
+// Set pixel size ONCE — same as 3D canvas
+chand.width  = window.innerWidth;
+chand.height = window.innerHeight;
+const hctx   = chand.getContext('2d');
+
+const BONES = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[0,17],[17,18],[18,19],[19,20],
+];
+const BONE_COL = i =>
+  i<=4 ? '#ff6b00' : i<=8 ? '#00ffe7' : i<=12 ? '#aaffee' : i<=16 ? '#88eeff' : '#66ddee';
+
+function drawHand(lm) {
+  // Clear with clearRect — NEVER assign .width/.height (that nukes context state)
+  hctx.clearRect(0, 0, chand.width, chand.height);
+
+  // Mirror x to match video's CSS scaleX(-1)
+  const pts = lm.map(p => ({
+    x: (1 - p.x) * chand.width,
+    y: p.y * chand.height,
+  }));
+
+  // Bones
+  BONES.forEach(([a, b]) => {
+    hctx.beginPath();
+    hctx.moveTo(pts[a].x, pts[a].y);
+    hctx.lineTo(pts[b].x, pts[b].y);
+    hctx.strokeStyle = BONE_COL(b);
+    hctx.lineWidth   = 2.5;
+    hctx.globalAlpha = 0.55;
+    hctx.stroke();
+  });
+  hctx.globalAlpha = 1;
+
+  // Joints
+  pts.forEach((pt, i) => {
+    const tip = [4,8,12,16,20].includes(i);
+    hctx.beginPath();
+    hctx.arc(pt.x, pt.y, tip ? 7 : 4, 0, Math.PI*2);
+    hctx.fillStyle = i===8 ? '#00ffe7' : i===4 ? '#ff6b00' : tip ? '#ffffff' : 'rgba(0,255,231,0.5)';
+    hctx.fill();
+  });
+
+  // Pinch line
+  if (gest === 'pinch') {
+    hctx.beginPath();
+    hctx.moveTo(pts[4].x, pts[4].y);
+    hctx.lineTo(pts[8].x, pts[8].y);
+    hctx.strokeStyle = '#ffcc00';
+    hctx.lineWidth = 2;
+    hctx.setLineDash([5,5]);
+    hctx.globalAlpha = 0.7;
+    hctx.stroke();
+    hctx.setLineDash([]);
+    hctx.globalAlpha = 1;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  GESTURE DETECTION
+// ═══════════════════════════════════════════════════════
+function fingerUp(tip, base) { return tip.y < base.y - 0.05; }
+
+function detectGest(lm) {
+  const eI = fingerUp(lm[8],  lm[5]);
+  const eM = fingerUp(lm[12], lm[9]);
+  const eR = fingerUp(lm[16], lm[13]);
+  const eP = fingerUp(lm[20], lm[17]);
+  const pd  = Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y, lm[4].z-lm[8].z);
+  const pin = pd < 0.06;
+
+  // Only detect clear, unambiguous gestures
+  // Everything ambiguous = 'idle' so we don't accidentally trigger
+  if (pin && !eM && !eR && !eP)  return 'pinch';  // 🤏 тільки щипок
+  if (eI && eM && eR && eP)      return 'open';   // ✋ всі пальці
+  if (eI && eM && !eR && !eP)    return 'two';    // ✌️ два пальці
+  if (eI && !eM && !eR && !eP)   return 'point';  // ☝️ один палець
+  return 'idle'; // все інше — нічого не робимо, зберігаємо стан
+}
+
+// ═══════════════════════════════════════════════════════
+//  GESTURE LOGIC
+// ═══════════════════════════════════════════════════════
+const GLABELS = {
+  point:'☝️ НАВЕСТИ', two:'✌️ РУХАТИ', pinch:'🤏 МАСШТАБ',
+  open:'✋ ПАНЕЛЬ', idle:'◈ СТЕЖУ',
+};
+
+function processGest(g, lm) {
+  // Cursor dot
+  const dot = $('dot');
+  dot.style.display = 'block';
+  dot.style.left = sx + 'px';
+  dot.style.top  = sy + 'px';
+  dot.className = g==='two'?'grab': g==='pinch'?'pinch': g==='open'?'open': '';
+  $('glabel').textContent = GLABELS[g] || '◈';
+
+  // Gesture frame counter
+  if (g !== prevGest) { prevGest = g; gestF = 0; } else gestF++;
+  if (spawnCD > 0) spawnCD--;
+
+  // ── ☝️ POINT: вибрати предмет ─────────────────────────
+  if (g === 'point') {
+    // Select after holding 4 frames (avoid mis-fires)
+    if (gestF === 4) {
+      const hit = hitTest(sx, sy);
+      if (hit) { sel = hit; flash('☝️'); }
+    }
+    if (panelOpen) panelHover(sx, sy);
+  }
+
+  // ── ✌️ TWO: рухати предмет ────────────────────────────
+  // IMPORTANT: switching point→two does NOT clear sel
+  if (g === 'two') {
+    if (!grabbing) {
+      // Start grab: anchor at current finger + current object position
+      grabAX = sx; grabAY = sy;
+      grabOX = sel ? sel.x : 0;
+      grabOY = sel ? sel.y : 0;
+      grabbing = true;
+    }
+    if (sel) {
+      const depth  = -sel.z;
+      const scaleH = depth * 1.8 / c3d.width;
+      const scaleV = depth * 1.8 / c3d.height;
+      sel.x = grabOX + (sx - grabAX) * scaleH;
+      sel.y = grabOY - (sy - grabAY) * scaleV;
+    }
+  } else {
+    if (grabbing && sel) {
+      // Freeze: save current position as new anchor for next grab
+      grabOX = sel.x; grabOY = sel.y;
+    }
+    grabbing = false;
+  }
+
+  // ── 🤏 PINCH: масштаб ─────────────────────────────────
+  if (g === 'pinch' && sel) {
+    const tx = (1 - lm[4].x) * c3d.width;
+    const ty = lm[4].y * c3d.height;
+    const d  = Math.hypot(tx - sx, ty - sy);
+    if (!pinching) { pinchAD = d; pinchAS = sel.scale; pinching = true; }
+    if (pinchAD > 6) sel.scale = Math.max(.15, Math.min(4.0, pinchAS * (d / pinchAD)));
+  } else {
+    pinching = false;
+  }
+
+  // ── ✋ OPEN: панель (тримати 25 кадрів) ───────────────
+  if (g === 'open' && gestF === 25) { togglePanel(); flash('✋'); }
+
+  // ── Завжди показувати кільце якщо є вибір ─────────────
+  if (sel) ringUpdate(); else ringHide();
+}
+
+// ── Hit test ──────────────────────────────────────────
+function hitTest(scx, scy) {
+  let best = null, bestDepth = Infinity;
+  objs.forEach(o => {
+    const sp = toScreen(o.x, o.y, o.z);
+    const r  = Math.max(40, 90 / (-o.z) * o.scale);
+    if (Math.hypot(sp.x-scx, sp.y-scy) < r && (-o.z) < bestDepth) {
+      bestDepth = -o.z; best = o;
+    }
+  });
+  return best;
+}
+
+// ── Selection ring ────────────────────────────────────
+function ringUpdate() {
+  if (!sel) { ringHide(); return; }
+  const sp = toScreen(sel.x, sel.y, sel.z);
+  const r  = Math.max(28, 85 / (-sel.z) * sel.scale);
+  const ring = $('sring');
+  ring.style.display = 'block';
+  ring.style.left   = (sp.x - r) + 'px';
+  ring.style.top    = (sp.y - r) + 'px';
+  ring.style.width  = ring.style.height = (r*2) + 'px';
+}
+function ringHide() { $('sring').style.display = 'none'; }
+
+// ── Panel ─────────────────────────────────────────────
+function buildPanel() {
+  const panel = $('panel');
+  panel.innerHTML = '<div id="ptitle">ПРЕДМЕТИ</div>';
+  CAT.forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'pitem';
+    d.style.background = `rgba(${c.c.map(v=>Math.round(v*55)).join(',')},0.65)`;
+    d.innerHTML = `<span>${c.e}</span><small>${c.n}</small><div class="pbar"></div>`;
+    d.onclick = () => spawnItem(i);
+    panel.appendChild(d);
+  });
+}
+function togglePanel() {
+  panelOpen = !panelOpen;
+  $('panel').classList.toggle('open', panelOpen);
+  if (!panelOpen) { panelHoverIdx=-1; panelHoverF=0; }
+  // Reset gesture tracking so same gesture doesn't re-trigger immediately
+  prevGest = 'none'; gestF = 0;
+}
+function panelHover(scx, scy) {
+  const items = document.querySelectorAll('.pitem');
+  let found = -1;
+  items.forEach((el, i) => {
+    const r = el.getBoundingClientRect();
+    const hit = scx>=r.left&&scx<=r.right&&scy>=r.top&&scy<=r.bottom;
+    el.classList.toggle('hov', hit);
+    const bar = el.querySelector('.pbar');
+    if (bar) bar.style.width = (hit && i===panelHoverIdx)
+      ? Math.min(100, panelHoverF/DWELL*100)+'%' : '0%';
+    if (hit) found = i;
+  });
+  if (found !== -1) {
+    if (found === panelHoverIdx) {
+      panelHoverF++;
+      if (panelHoverF >= DWELL) { spawnItem(found); panelHoverF=0; }
+    } else { panelHoverIdx=found; panelHoverF=0; }
+  } else { panelHoverIdx=-1; panelHoverF=0; }
+}
+function spawnItem(i) {
+  const c = CAT[i];
+  const o = mkObj(c.type, 0, 0, -8, c.c);
+  objs.push(o);
+  sel = o;
+  panelOpen = false; $('panel').classList.remove('open');
+  flash(c.e);
+  // Ignore fist/deselect for 60 frames after spawn
+  // so closing hand after panel doesn't instantly delete
+  spawnCD = 60;
+  throwCD = 60;
+  grabbing = false;
+  prevGest = 'none';
+  gestF = 0;
+}
+function deselect() { sel = null; grabbing = false; pinching = false; ringHide(); flash('○'); }
+function clearAll() { initScene(); ringHide(); flash('🗑️'); }
+
+// ── Flash ─────────────────────────────────────────────
+function flash(emoji) {
+  const el = $('flash');
+  el.textContent = emoji; el.style.opacity = '1';
+  clearTimeout(flashTmr);
+  flashTmr = setTimeout(() => el.style.opacity='0', 700);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MEDIAPIPE
+// ═══════════════════════════════════════════════════════
+let mpH, mpCam;
+
+async function boot() {
+  $('boot').style.display = 'none';
+  $('loading').style.display = 'flex';
+  setBar(10); initScene(); buildPanel();
+
+  const vid = $('vid');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false
+    });
+    vid.srcObject = stream;
+    await new Promise(r => vid.onloadedmetadata = r);
+    vid.play();
+  } catch(e) {
+    alert('❌ Дозволь камеру!\n\nПотрібен HTTPS або localhost.\n\n'+e.message);
+    $('loading').style.display='none'; $('boot').style.display='flex'; return;
+  }
+  setBar(40); $('lmsg').textContent='ЗАВАНТАЖЕННЯ MEDIAPIPE...';
+
+  mpH = new Hands({ locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+  mpH.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:.72, minTrackingConfidence:.65 });
+  mpH.onResults(onResults);
+  setBar(70); $('lmsg').textContent='ЗАПУСК КАМЕРИ...';
+
+  mpCam = new Camera(vid, { onFrame: async()=>{ await mpH.send({image:vid}); }, width:640, height:480 });
+  await mpCam.start();
+  setBar(100);
+
+  setTimeout(() => {
+    $('loading').style.display='none';
+    $('game').style.display='block';
+    sx = c3d.width/2; sy = c3d.height/2;
+    renderLoop();
+  }, 400);
+}
+function setBar(v) { $('bar').style.width=v+'%'; }
+
+function onResults(res) {
+  // Clear skeleton — clearRect, NOT width=/height= assignment!
+  hctx.clearRect(0, 0, chand.width, chand.height);
+
+  if (!res.multiHandLandmarks || !res.multiHandLandmarks.length) {
+    $('dot').style.display = 'none';
+    $('glabel').textContent = '◈ ПОКАЖИ РУКУ';
+    return;
+  }
+
+  const lm = res.multiHandLandmarks[0];
+  drawHand(lm);
+
+  // Fingertip mirrored to match video
+  const raw_x = (1 - lm[8].x) * c3d.width;
+  const raw_y = lm[8].y * c3d.height;
+  // Smooth
+  sx += (raw_x - sx) * 0.4;
+  sy += (raw_y - sy) * 0.4;
+
+  gest = detectGest(lm);
+  processGest(gest, lm);
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER LOOP — gl.viewport never changes, canvas never resized
+// ═══════════════════════════════════════════════════════
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  animT = performance.now() / 1000;
+
+  // Use the fixed viewport set at init — never change it here
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  objs.forEach(o => {
+    if (o !== sel) o.ry += 0.007;   // idle spin only when not held
+    drawObj(o, animT);
+  });
+
+  if (sel) ringUpdate();
+
+  fc++;
+  if (animT - fpt > 1) {
+    $('flabel').textContent = fc+' FPS'; fc=0; fpt=animT;
+  }
+  $('olabel').textContent = objs.length+' OBJ';
+}
+
+// Keyboard shortcuts (desktop testing)
+window.addEventListener('keydown', e => {
+  if (e.key==='p') togglePanel();
+  if (e.key==='Escape') { panelOpen=false; $('panel').classList.remove('open'); sel=null; ringHide(); }
+  if (sel) {
+    if (e.key==='ArrowLeft')  sel.ry-=.15;
+    if (e.key==='ArrowRight') sel.ry+=.15;
+    if (e.key==='ArrowUp')    sel.z -=.2;
+    if (e.key==='ArrowDown')  sel.z +=.2;
+    if (e.key==='+') sel.scale=Math.min(4,sel.scale+.1);
+    if (e.key==='-') sel.scale=Math.max(.15,sel.scale-.1);
+  }
+});
+</script>
+</body>
+</html>
