@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>VR Space Shooter</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'Orbitron',monospace}
+
+/* ── BOOT SCREEN ── */
+#boot{position:fixed;inset:0;background:radial-gradient(ellipse at center,#0a0020 0%,#000 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:18px}
+.stars-bg{position:absolute;inset:0;overflow:hidden}
+.star{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--d,3s) ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:.2}50%{opacity:1}}
+#boot h1{font-size:clamp(22px,6vw,42px);color:#fff;letter-spacing:6px;text-align:center;position:relative}
+#boot h1 span{color:#ff3366;text-shadow:0 0 30px #ff3366}
+.subtitle{color:rgba(255,255,255,.4);font-size:10px;letter-spacing:4px;text-align:center}
+.gesture-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:340px;width:90%}
+.gcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.gcard .ico{font-size:22px}
+.gcard .txt{font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.5);line-height:1.6}
+.gcard .txt b{color:#ff3366;display:block;font-size:10px;margin-bottom:2px}
+#startbtn{background:linear-gradient(135deg,#ff3366,#ff6633);border:none;color:#fff;font-family:'Orbitron',monospace;font-size:12px;letter-spacing:5px;padding:14px 40px;border-radius:4px;cursor:pointer;box-shadow:0 0 30px rgba(255,51,102,.4);transition:.3s;margin-top:4px}
+#startbtn:hover{transform:scale(1.05);box-shadow:0 0 50px rgba(255,51,102,.7)}
+.warn{color:rgba(255,180,0,.6);font-size:9px;letter-spacing:2px;text-align:center;max-width:280px}
+
+/* ── LOADING ── */
+#load{position:fixed;inset:0;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:998;gap:12px}
+#load p{color:#ff3366;font-size:10px;letter-spacing:4px}
+#bw{width:200px;height:2px;background:rgba(255,255,255,.1)}
+#bp{height:100%;background:linear-gradient(90deg,#ff3366,#ff6633);width:0;transition:width .3s}
+
+/* ── VR CONTAINER ── */
+#vr{position:fixed;inset:0;display:none;flex-direction:row}
+
+/* Each eye */
+.eye{position:relative;width:50%;height:100%;overflow:hidden}
+.eye video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+
+/* Barrel distortion via CSS filter (approximation) */
+.eye.left{border-right:2px solid #111}
+.eye.right .canvas3d,.eye.right .canvhand{transform:scaleX(1)}
+
+.canvas3d{position:absolute;top:0;left:0;pointer-events:none;z-index:1}
+.canvhand{position:absolute;top:0;left:0;pointer-events:none;z-index:2}
+
+/* ── HUD (centered, spans both eyes) ── */
+#hud{position:fixed;top:0;left:0;right:0;z-index:50;pointer-events:none;display:none}
+
+/* Score top center */
+#score-bar{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:50;display:none;align-items:center;gap:0;pointer-events:none}
+.score-eye{width:50vw;display:flex;justify-content:center;padding:8px 0;background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent)}
+.score-inner{color:#fff;font-size:11px;letter-spacing:3px;text-align:center}
+.score-inner .val{font-size:20px;color:#ff3366;display:block;text-shadow:0 0 15px #ff3366}
+.score-inner .lbl{font-size:7px;opacity:.4}
+
+/* Health bar */
+#health-bar{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:50;display:none;gap:0;pointer-events:none;align-items:center}
+.health-eye{width:50vw;display:flex;justify-content:center}
+.health-inner{display:flex;gap:4px;align-items:center}
+.hp{width:14px;height:14px;border-radius:50%;background:#ff3366;box-shadow:0 0 8px #ff3366;transition:.3s}
+.hp.dead{background:rgba(255,255,255,.1);box-shadow:none}
+
+/* Crosshair - one per eye */
+.crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10;pointer-events:none}
+.crosshair svg{width:60px;height:60px}
+.ch-ring{animation:chspin 4s linear infinite}
+@keyframes chspin{to{transform:rotate(360deg);transform-origin:center}}
+
+/* Kill flash */
+#killflash{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,51,102,.3),transparent 60%);transition:opacity .1s}
+
+/* Damage flash */
+#dmgflash{position:fixed;inset:0;z-index:41;pointer-events:none;opacity:0;background:rgba(255,0,0,.35);transition:opacity .15s}
+
+/* Wave announce */
+#waveannounce{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:60;pointer-events:none;opacity:0;font-size:clamp(18px,5vw,32px);color:#fff;letter-spacing:8px;text-shadow:0 0 20px #ff3366;transition:opacity .3s;white-space:nowrap}
+
+/* Game over */
+#gameover{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:70;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#gameover h2{font-size:clamp(24px,7vw,48px);color:#ff3366;letter-spacing:8px;text-shadow:0 0 40px #ff3366}
+#gameover .stats{color:rgba(255,255,255,.4);font-size:10px;letter-spacing:3px;text-align:center;line-height:2.2}
+#gameover .stats span{color:#fff;font-size:14px}
+#replaybtn{background:transparent;border:1.5px solid #ff3366;color:#ff3366;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:4px;padding:12px 32px;border-radius:3px;cursor:pointer;transition:.3s}
+#replaybtn:hover{background:#ff3366;color:#000}
+
+/* Gesture indicator bottom center */
+#gestind{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:50;display:none;align-items:center;gap:0;pointer-events:none}
+.gestind-eye{width:50vw;display:flex;justify-content:center}
+.gestind-inner{color:rgba(255,255,255,.3);font-size:8px;letter-spacing:3px}
+
+/* Shoot particles - CSS only */
+.spark{position:fixed;border-radius:50%;pointer-events:none;z-index:45;animation:sparkfly .4s ease-out forwards}
+@keyframes sparkfly{0%{transform:scale(1);opacity:1}100%{transform:scale(0) translate(var(--tx),var(--ty));opacity:0}}
+</style>
+</head>
+<body>
+
+<!-- BOOT -->
+<div id="boot">
+  <div class="stars-bg" id="starbg"></div>
+  <div class="subtitle">— VR SPACE SHOOTER —</div>
+  <h1>ALIEN<br><span>INVASION</span></h1>
+  <div class="gesture-list">
+    <div class="gcard"><span class="ico">☝️</span><div class="txt"><b>ПРИЦІЛЮВАННЯ</b>Наведи палець на ворога</div></div>
+    <div class="gcard"><span class="ico">🤏</span><div class="txt"><b>ПОСТРІЛ</b>Зроби щипок — вогонь!</div></div>
+    <div class="gcard"><span class="ico">✌️</span><div class="txt"><b>ЛАЗЕР</b>Два пальці = лазерний промінь</div></div>
+    <div class="gcard"><span class="ico">✋</span><div class="txt"><b>ЩИТ</b>Відкрита долоня = захист 2с</div></div>
+  </div>
+  <button id="startbtn" onclick="startGame()">▶ ЗАПУСТИТИ VR</button>
+  <div class="warn">⚠️ Потрібен HTTPS та дозвіл камери</div>
+</div>
+
+<!-- LOAD -->
+<div id="load"><p id="lmsg">ЗАВАНТАЖЕННЯ...</p><div id="bw"><div id="bp"></div></div></div>
+
+<!-- VR SPLIT SCREEN -->
+<div id="vr">
+  <!-- LEFT EYE -->
+  <div class="eye left" id="eyeL">
+    <video autoplay playsinline muted></video>
+    <canvas class="canvas3d" id="c3L"></canvas>
+    <canvas class="canvhand" id="chL"></canvas>
+    <div class="crosshair" id="crossL">
+      <svg viewBox="0 0 60 60"><g class="ch-ring"><circle cx="30" cy="30" r="20" fill="none" stroke="rgba(255,51,102,.6)" stroke-width="1" stroke-dasharray="8 4"/></g><circle cx="30" cy="30" r="3" fill="#ff3366"/><line x1="30" y1="5" x2="30" y2="18" stroke="rgba(255,255,255,.5)" stroke-width="1"/><line x1="30" y1="42" x2="30" y2="55" stroke="rgba(255,255,255,.5)" stroke-width="1"/><line x1="5" y1="30" x2="18" y2="30" stroke="rgba(255,255,255,.5)" stroke-width="1"/><line x1="42" y1="30" x2="55" y2="30" stroke="rgba(255,255,255,.5)" stroke-width="1"/></svg>
+    </div>
+  </div>
+  <!-- RIGHT EYE -->
+  <div class="eye right" id="eyeR">
+    <video autoplay playsinline muted></video>
+    <canvas class="canvas3d" id="c3R"></canvas>
+    <canvas class="canvhand" id="chR"></canvas>
+    <div class="crosshair" id="crossR">
+      <svg viewBox="0 0 60 60"><g class="ch-ring"><circle cx="30" cy="30" r="20" fill="none" stroke="rgba(255,51,102,.6)" stroke-width="1" stroke-dasharray="8 4"/></g><circle cx="30" cy="30" r="3" fill="#ff3366"/><line x1="30" y1="5" x2="30" y2="18" stroke="rgba(255,255,255,.5)" stroke-width="1"/><line x1="30" y1="42" x2="30" y2="55" stroke="rgba(255,255,255,.5)" stroke-width="1"/><line x1="5" y1="30" x2="18" y2="30" stroke="rgba(255,255,255,.5)" stroke-width="1"/><line x1="42" y1="30" x2="55" y2="30" stroke="rgba(255,255,255,.5)" stroke-width="1"/></svg>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAYS -->
+<div id="score-bar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:50;display:none;pointer-events:none;">
+  <div style="width:50%;display:flex;justify-content:center;padding:8px 0;background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent)">
+    <div class="score-inner"><span class="val" id="scoreL">0</span><span class="lbl">ОЧКИ</span></div>
+  </div>
+  <div style="width:50%;display:flex;justify-content:center;padding:8px 0;background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent)">
+    <div class="score-inner"><span class="val" id="scoreR">0</span><span class="lbl">ХВИЛЯ</span></div>
+  </div>
+</div>
+<div id="healthbar" style="position:fixed;bottom:70px;left:0;right:0;z-index:50;display:none;pointer-events:none;">
+  <div style="width:50%;display:flex;justify-content:center"><div class="health-inner" id="hpL"></div></div>
+  <div style="width:50%;display:flex;justify-content:center"><div class="health-inner" id="hpR"></div></div>
+</div>
+<div id="gestbar" style="position:fixed;bottom:14px;left:0;right:0;z-index:50;display:none;pointer-events:none;display:none">
+  <div style="width:50%;display:flex;justify-content:center"><div class="gestind-inner" id="gestL">◈</div></div>
+  <div style="width:50%;display:flex;justify-content:center"><div class="gestind-inner" id="gestR">◈</div></div>
+</div>
+<div id="killflash"></div>
+<div id="dmgflash"></div>
+<div id="waveannounce"></div>
+<div id="gameover" style="display:none">
+  <h2>GAME OVER</h2>
+  <div class="stats">ЗНИЩЕНО ВОРОГІВ<br><span id="goKills">0</span><br>ХВИЛЯ<br><span id="goWave">1</span><br>ОЧКИ<br><span id="goScore">0</span></div>
+  <button id="replaybtn" onclick="restartGame()">↺ ЩЕ РАЗ</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════
+//  VR ALIEN SHOOTER
+//  Split-screen для VR окулярів
+//  Керування: ☝️ прицілювання, 🤏 постріл, ✌️ лазер, ✋ щит
+// ═══════════════════════════════════════════════════════
+
+// ── Зірки на стартовому екрані ───────────────────────
+(()=>{const bg=document.getElementById('starbg');for(let i=0;i<120;i++){const s=document.createElement('div');s.className='star';const sz=Math.random()*2.5+.5;s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${2+Math.random()*4}s;animation-delay:${Math.random()*4}s`;bg.appendChild(s);}})();
+
+// ── Розміри ───────────────────────────────────────────
+const EW=()=>Math.floor(window.innerWidth/2);
+const EH=()=>window.innerHeight;
+
+// ── Стан гри ─────────────────────────────────────────
+let score=0, wave=1, hp=5, kills=0;
+let gameActive=false;
+let enemies=[], bullets=[], lasers=[], particles3d=[];
+let shieldActive=false, shieldTimer=0;
+let shootCD=0, laserCD=0;
+let waveCooldown=0;
+
+// ── Жести ─────────────────────────────────────────────
+let curX=0.5, curY=0.5; // нормалізовані [0..1]
+let handWarmup=0;
+let prevGest='idle';
+let pinchFrames=0, openFrames=0;
+let laserActive=false;
+
+// ── Анімація ──────────────────────────────────────────
+let animT=0, lastT=0, fc=0, fpt=0;
+
+// ═══════════════════════════════════════════════════════
+//  WebGL setup — ONE context shared, drawn to BOTH eyes
+// ═══════════════════════════════════════════════════════
+function setupGL(canvas) {
+  const w=EW(), h=EH();
+  canvas.width=w; canvas.height=h;
+  const gl=canvas.getContext('webgl',{antialias:true,alpha:true,premultipliedAlpha:false});
+  gl.clearColor(0,0,0,0);
+  gl.viewport(0,0,w,h);
+  return gl;
+}
+
+const c3L=document.getElementById('c3L');
+const c3R=document.getElementById('c3R');
+const glL=setupGL(c3L);
+const glR=setupGL(c3R);
+
+// Shader source
+const VS=`
+attribute vec3 aP; attribute vec3 aN;
+uniform mat4 uMVP, uM;
+varying vec3 vN, vW;
+void main(){
+  vN=(uM*vec4(aN,0)).xyz;
+  vW=(uM*vec4(aP,1)).xyz;
+  gl_Position=uMVP*vec4(aP,1.0);
+}`;
+const FS=`
+precision mediump float;
+varying vec3 vN, vW;
+uniform vec3 uCol;
+uniform float uGlow, uT;
+void main(){
+  vec3 L=normalize(vec3(2,5,3)-vW);
+  float d=max(dot(normalize(vN),L),0.0)*.7+.3;
+  vec3 c=uCol*d;
+  if(uGlow>.0) c=mix(c,uCol,uGlow)+uCol*uGlow*.5;
+  gl_FragColor=vec4(c,1.0);
+}`;
+
+function makeGL(gl){
+  function sh(t,s){const h=gl.createShader(t);gl.shaderSource(h,s);gl.compileShader(h);return h;}
+  const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,VS));
+  gl.attachShader(p,sh(gl.FRAGMENT_SHADER,FS));
+  gl.linkProgram(p);gl.useProgram(p);
+  return{pr:p,
+    aP:gl.getAttribLocation(p,'aP'),aN:gl.getAttribLocation(p,'aN'),
+    uMVP:gl.getUniformLocation(p,'uMVP'),uM:gl.getUniformLocation(p,'uM'),
+    uCol:gl.getUniformLocation(p,'uCol'),uGlow:gl.getUniformLocation(p,'uGlow'),uT:gl.getUniformLocation(p,'uT')};
+}
+const LL=makeGL(glL), LR=makeGL(glR);
+
+// Matrix
+const m4=()=>new Float32Array(16);
+function eye4(){const m=m4();m[0]=m[5]=m[10]=m[15]=1;return m;}
+function mul4(a,b){const r=m4();for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[i*4+k]*b[k*4+j];r[i*4+j]=s;}return r;}
+function persp(fov,asp,n,f){const t=1/Math.tan(fov*Math.PI/360),r=m4();r[0]=t/asp;r[5]=t;r[10]=(f+n)/(n-f);r[11]=-1;r[14]=2*f*n/(n-f);return r;}
+function trans(x,y,z){const r=eye4();r[12]=x;r[13]=y;r[14]=z;return r;}
+function scaleM(s){const r=eye4();r[0]=r[5]=r[10]=s;return r;}
+function ry(a){const c=Math.cos(a),s=Math.sin(a),r=eye4();r[0]=c;r[2]=s;r[8]=-s;r[10]=c;return r;}
+function rx(a){const c=Math.cos(a),s=Math.sin(a),r=eye4();r[5]=c;r[6]=-s;r[9]=s;r[10]=c;return r;}
+
+// Upload geometry
+function upload(gl,pos,nrm,idx){
+  const pb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(pos),gl.STATIC_DRAW);
+  const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(nrm),gl.STATIC_DRAW);
+  const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+  return{pb,nb,ib,n:idx.length};
+}
+
+// Alien saucer geometry
+function makeSaucer(gl){
+  const p=[],n=[],idx=[];
+  // Disc shape: flat torus-like
+  const RS=16,rO=.5,rI=.15,hT=.18;
+  for(let i=0;i<=RS;i++){
+    const a=i/RS*Math.PI*2;
+    const co=Math.cos(a),si=Math.sin(a);
+    // outer bottom, outer top, inner bottom, inner top
+    p.push(co*rO,-.05,si*rO, co*rO,hT*.3,si*rO, co*rI,-.02,si*rI, co*rI,hT,si*rI);
+    // normals approximate
+    n.push(co*.3,-1,si*.3, co*.5,1,si*.5, 0,-.5,0, 0,1,0);
+  }
+  for(let i=0;i<RS;i++){
+    const b=i*4;
+    idx.push(b,b+4,b+1, b+4,b+5,b+1); // outer
+    idx.push(b+1,b+5,b+3, b+5,b+7,b+3); // top
+    idx.push(b+3,b+7,b+2, b+7,b+6,b+2); // inner
+    idx.push(b+2,b+6,b, b+6,b+4,b); // bottom
+  }
+  return upload(gl,p,n,idx);
+}
+
+// Bullet sphere
+function makeBullet(gl){
+  const p=[],n=[],idx=[];const sg=6,r=.12;
+  for(let y=0;y<=sg;y++){const phi=y/sg*Math.PI;for(let x=0;x<=sg;x++){const th=x/sg*Math.PI*2,bx=Math.sin(phi)*Math.cos(th),by=Math.cos(phi),bz=Math.sin(phi)*Math.sin(th);p.push(bx*r,by*r,bz*r);n.push(bx,by,bz);}}
+  for(let y=0;y<sg;y++)for(let x=0;x<sg;x++){const a=y*(sg+1)+x;idx.push(a,a+1,a+sg+1,a+1,a+sg+2,a+sg+1);}
+  return upload(gl,p,n,idx);
+}
+
+// Shield ring
+function makeShield(gl){
+  const p=[],n=[],idx=[];const sg=20,R=.7,r=.05;
+  for(let j=0;j<=8;j++){const phi=j/8*Math.PI*2;for(let i=0;i<=sg;i++){const th=i/sg*Math.PI*2,cx=(R+r*Math.cos(th))*Math.cos(phi),cy=r*Math.sin(th),cz=(R+r*Math.cos(th))*Math.sin(phi);p.push(cx,cy,cz);n.push(Math.cos(th)*Math.cos(phi),Math.sin(th),Math.cos(th)*Math.sin(phi));}}
+  for(let j=0;j<8;j++)for(let i=0;i<sg;i++){const a=j*(sg+1)+i;idx.push(a,a+1,a+sg+1,a+1,a+sg+2,a+sg+1);}
+  return upload(gl,p,n,idx);
+}
+
+// Explosion particle (small cube)
+function makeExplosionPart(gl){
+  const s=.06,p=[],n=[],idx=[];
+  const F=[[0,0,1],[0,0,-1],[0,1,0],[0,-1,0],[1,0,0],[-1,0,0]];
+  const U=[[0,1,0],[0,1,0],[0,0,-1],[0,0,1],[0,1,0],[0,1,0]];
+  let b=0;F.forEach(([nx,ny,nz],fi)=>{const[ux,uy,uz]=U[fi],vx=ny*uz-nz*uy,vy=nz*ux-nx*uz,vz=nx*uy-ny*ux;for(let a=-1;a<=1;a+=2)for(let c=-1;c<=1;c+=2){p.push((nx+ux*a+vx*c)*s,(ny+uy*a+vy*c)*s,(nz+uz*a+vz*c)*s);n.push(nx,ny,nz);}idx.push(b,b+1,b+2,b+1,b+3,b+2);b+=4;});
+  return upload(gl,p,n,idx);
+}
+
+// Create meshes for each GL context
+const MESHES={
+  L:{saucer:makeSaucer(glL),bullet:makeBullet(glL),shield:makeShield(glL),expl:makeExplosionPart(glL)},
+  R:{saucer:makeSaucer(glR),bullet:makeBullet(glR),shield:makeShield(glR),expl:makeExplosionPart(glR)},
+};
+
+// ═══════════════════════════════════════════════════════
+//  Draw helper
+// ═══════════════════════════════════════════════════════
+function drawMesh(gl,L,mesh,M,col,glow=0){
+  const asp=EW()/EH();
+  const P=persp(70,asp,.05,60);
+  const MVP=mul4(P,M);
+  gl.uniformMatrix4fv(L.uMVP,false,MVP);
+  gl.uniformMatrix4fv(L.uM,false,M);
+  gl.uniform3fv(L.uCol,col);
+  gl.uniform1f(L.uGlow,glow);
+  gl.uniform1f(L.uT,animT);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.pb);gl.enableVertexAttribArray(L.aP);gl.vertexAttribPointer(L.aP,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.nb);gl.enableVertexAttribArray(L.aN);gl.vertexAttribPointer(L.aN,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.ib);gl.drawElements(gl.TRIANGLES,mesh.n,gl.UNSIGNED_SHORT,0);
+}
+
+// ═══════════════════════════════════════════════════════
+//  Game entities
+// ═══════════════════════════════════════════════════════
+function spawnEnemy(){
+  // Random position in front of player
+  const x=(Math.random()-.5)*8;
+  const y=(Math.random()-.5)*4;
+  const z=-(8+Math.random()*10);
+  const speed=.02+wave*.008;
+  const hp2=1+Math.floor(wave/3);
+  const type=Math.random()<.3?'fast':Math.random()<.15?'big':'normal';
+  const sc=type==='big'?1.8:type==='fast'?.7:1;
+  const col=type==='big'?[.9,.1,.1]:type==='fast'?[.1,.9,.5]:[.6,.1,.9];
+  enemies.push({x,y,z,vx:(Math.random()-.5)*.02,vy:Math.sin(Date.now()*.001)*.01,vz:speed,ry:0,hp:hp2,maxHp:hp2,sc,col,type,shootTimer:60+Math.random()*120,dead:false,deathT:0});
+}
+
+function spawnWave(){
+  enemies=[];
+  const count=3+wave*2;
+  for(let i=0;i<count;i++) setTimeout(()=>spawnEnemy(),i*400);
+  showWaveAnnounce(`ХВИЛЯ ${wave}`);
+}
+
+let enemyBullets=[];
+function enemyShoot(e){
+  // Enemy shoots toward player (center)
+  const dx=0-e.x, dy=0-e.y, dz=5-e.z;
+  const l=Math.hypot(dx,dy,dz);
+  const sp=.08+wave*.005;
+  enemyBullets.push({x:e.x,y:e.y,z:e.z,vx:dx/l*sp,vy:dy/l*sp,vz:dz/l*sp,life:120});
+}
+
+// ═══════════════════════════════════════════════════════
+//  Crosshair aiming: map finger position to 3D ray
+// ═══════════════════════════════════════════════════════
+function fingerTo3D(nx,ny){
+  // nx,ny in [0..1], map to world coords at z=-5
+  const z=-5;
+  const asp=EW()/EH();
+  const fov=70*Math.PI/180;
+  const x=(nx-.5)*2*Math.tan(fov/2)*asp*(-z);
+  const y=-(ny-.5)*2*Math.tan(fov/2)*(-z);
+  return{x,y,z};
+}
+
+// ═══════════════════════════════════════════════════════
+//  SHOOT
+// ═══════════════════════════════════════════════════════
+function shoot(){
+  if(shootCD>0||!gameActive)return;
+  const dir=fingerTo3D(curX,curY);
+  const l=Math.hypot(dir.x,dir.y,dir.z);
+  const sp=.35;
+  bullets.push({x:0,y:0,z:0,vx:dir.x/l*sp,vy:dir.y/l*sp,vz:dir.z/l*sp,life:80,col:[1,.3,.1]});
+  shootCD=12;
+  spawnSparks();
+}
+
+function spawnSparks(){
+  for(let i=0;i<6;i++){
+    const s=document.createElement('div');
+    s.className='spark';
+    const ang=Math.random()*Math.PI*2, dist=30+Math.random()*50;
+    s.style.cssText=`left:${EW()/2}px;top:${EH()/2}px;width:${3+Math.random()*4}px;height:${3+Math.random()*4}px;background:#ff6633;--tx:${Math.cos(ang)*dist}px;--ty:${Math.sin(ang)*dist}px`;
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),450);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SKELETON
+// ═══════════════════════════════════════════════════════
+const chL=document.getElementById('chL');
+const chR=document.getElementById('chR');
+function sizeHandCanvas(){chL.width=chR.width=EW();chL.height=chR.height=EH();}
+sizeHandCanvas();
+const hxL=chL.getContext('2d');
+const hxR=chR.getContext('2d');
+
+const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+
+function drawSkeleton(hx,lm,gest){
+  hx.clearRect(0,0,EW(),EH());
+  const pts=lm.map(p=>({x:(1-p.x)*EW(),y:p.y*EH()}));
+  const col=gest==='pinch'?'rgba(255,102,51,.7)':gest==='two'?'rgba(51,255,180,.7)':'rgba(255,51,102,.5)';
+  BONES.forEach(([a,b])=>{hx.beginPath();hx.moveTo(pts[a].x,pts[a].y);hx.lineTo(pts[b].x,pts[b].y);hx.strokeStyle=col;hx.lineWidth=2;hx.stroke();});
+  pts.forEach((pt,i)=>{const tip=[4,8,12,16,20].includes(i);hx.beginPath();hx.arc(pt.x,pt.y,tip?5.5:3,0,Math.PI*2);hx.fillStyle=i===8?'#ff3366':tip?'#fff':'rgba(255,51,102,.6)';hx.fill();});
+  // Show aim line from index finger
+  if(gest==='point'||gest==='pinch'){
+    hx.beginPath();hx.moveTo(pts[8].x,pts[8].y);hx.lineTo(EW()/2,EH()/2);hx.strokeStyle='rgba(255,51,102,.25)';hx.lineWidth=1;hx.setLineDash([6,6]);hx.stroke();hx.setLineDash([]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  GESTURE DETECTION
+// ═══════════════════════════════════════════════════════
+function isUp(tip,base){return tip.y<base.y-0.055;}
+
+function getGest(lm){
+  const eI=isUp(lm[8],lm[5]);
+  const eM=isUp(lm[12],lm[9]);
+  const eR=isUp(lm[16],lm[13]);
+  const eP=isUp(lm[20],lm[17]);
+  const pd=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y);
+  if(eI&&eM&&eR&&eP) return 'open';
+  if(eI&&eM&&!eR&&!eP) return 'two';
+  if(eI&&!eM&&!eR&&!eP) return 'point';
+  if(pd<0.07&&!eM&&!eR&&!eP) return 'pinch';
+  return 'idle';
+}
+
+function handleGest(g,lm){
+  if(handWarmup<15){handWarmup++;return;}
+  if(!gameActive)return;
+
+  // Cursor = index fingertip mapped to eye half
+  curX=1-lm[8].x;
+  curY=lm[8].y;
+
+  // Move crosshair to finger position
+  const cx=curX*EW(), cy=curY*EH();
+  document.getElementById('crossL').style.transform=`translate(calc(${cx}px - 50%), calc(${cy}px - 50%))`;
+  document.getElementById('crossR').style.transform=`translate(calc(${cx}px - 50%), calc(${cy}px - 50%))`;
+
+  // Labels
+  const labels={point:'☝️ ПРИЦІЛЮВАННЯ',two:'✌️ ЛАЗЕР',pinch:'🔥 ПОСТРІЛ!',open:'🛡️ ЩИТ',idle:'◈'};
+  document.getElementById('gestL').textContent=labels[g]||'◈';
+  document.getElementById('gestR').textContent=labels[g]||'◈';
+
+  // ☝️ POINT: aim only
+  // 🤏 PINCH: shoot
+  if(g==='pinch'){
+    pinchFrames++;
+    if(pinchFrames%8===1) shoot();
+  } else pinchFrames=0;
+
+  // ✌️ TWO: laser beam
+  laserActive=(g==='two');
+  if(laserActive&&laserCD<=0){
+    // Continuous laser damage
+    checkLaserHit();
+    laserCD=3;
+  }
+
+  // ✋ OPEN: shield
+  if(g==='open'){
+    openFrames++;
+    if(openFrames>=10&&!shieldActive){shieldActive=true;shieldTimer=120;}
+  } else openFrames=0;
+
+  if(shootCD>0)shootCD--;
+  if(laserCD>0)laserCD--;
+}
+
+// ═══════════════════════════════════════════════════════
+//  HIT DETECTION
+// ═══════════════════════════════════════════════════════
+function checkBulletHits(){
+  bullets.forEach(b=>{
+    if(b.dead)return;
+    enemies.forEach(e=>{
+      if(e.dead)return;
+      const d=Math.hypot(b.x-e.x,b.y-e.y,b.z-e.z);
+      if(d<.5*e.sc){
+        b.dead=true; e.hp--;
+        if(e.hp<=0) killEnemy(e);
+      }
+    });
+  });
+}
+
+function checkLaserHit(){
+  // Laser goes from origin toward finger direction
+  const dir=fingerTo3D(curX,curY);
+  const l=Math.hypot(dir.x,dir.y,dir.z);
+  const dx=dir.x/l, dy=dir.y/l, dz=dir.z/l;
+  enemies.forEach(e=>{
+    if(e.dead)return;
+    // Ray-sphere intersection approximation
+    const ex=e.x,ey=e.y,ez=e.z;
+    const proj=ex*dx+ey*dy+ez*dz;
+    if(proj<0)return;
+    const px=dx*proj,py=dy*proj,pz=dz*proj;
+    const dist=Math.hypot(ex-px,ey-py,ez-pz);
+    if(dist<.5*e.sc){e.hp-=.5;if(e.hp<=0)killEnemy(e);}
+  });
+}
+
+function killEnemy(e){
+  e.dead=true;e.deathT=animT;
+  score+=e.type==='big'?300:e.type==='fast'?150:100;
+  kills++;
+  updateHUD();
+  // Spawn explosion particles
+  for(let i=0;i<12;i++){
+    particles3d.push({x:e.x,y:e.y,z:e.z,vx:(Math.random()-.5)*.12,vy:(Math.random()-.5)*.12,vz:(Math.random()-.5)*.12,col:[...e.col],life:40,maxLife:40});
+  }
+  // Kill flash
+  const kf=document.getElementById('killflash');
+  kf.style.opacity='1';setTimeout(()=>kf.style.opacity='0',150);
+}
+
+function checkEnemyBulletHits(){
+  enemyBullets.forEach(b=>{
+    if(b.dead)return;
+    const d=Math.hypot(b.x,b.y,b.z);
+    if(d<.8){
+      b.dead=true;
+      if(!shieldActive){
+        hp--;updateHUD();
+        const df=document.getElementById('dmgflash');
+        df.style.opacity='1';setTimeout(()=>df.style.opacity='0',200);
+        if(hp<=0)gameOver();
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER — called for BOTH eyes
+// ═══════════════════════════════════════════════════════
+function renderEye(gl,L,M){
+  const w=EW(),h=EH();
+  gl.viewport(0,0,w,h);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(L.pr);
+
+  // Draw enemies
+  enemies.forEach(e=>{
+    if(e.dead)return;
+    const hpRatio=e.hp/e.maxHp;
+    const glow=1-hpRatio;
+    const mat=mul4(mul4(trans(e.x,e.y,e.z),ry(e.ry)),scaleM(e.sc));
+    drawMesh(gl,L,M.saucer,mat,e.col,glow);
+  });
+
+  // Draw player bullets
+  bullets.forEach(b=>{
+    if(b.dead)return;
+    const mat=trans(b.x,b.y,b.z);
+    drawMesh(gl,L,M.bullet,mat,[1,.3,.1],1.0);
+  });
+
+  // Draw enemy bullets
+  enemyBullets.forEach(b=>{
+    if(b.dead)return;
+    const mat=mul4(trans(b.x,b.y,b.z),scaleM(.7));
+    drawMesh(gl,L,M.bullet,mat,[1,.1,.1],.8);
+  });
+
+  // Draw laser beam (2D overlay via canvas)
+
+  // Draw shield
+  if(shieldActive){
+    const mat=mul4(trans(0,0,-.5),scaleM(.9+Math.sin(animT*8)*.05));
+    drawMesh(gl,L,M.shield,mat,[.1,.5,1],1.2);
+  }
+
+  // Explosion particles
+  particles3d.forEach(p=>{
+    if(p.life<=0)return;
+    const t=1-p.life/p.maxLife;
+    const mat=mul4(trans(p.x,p.y,p.z),scaleM(1-t*.7));
+    drawMesh(gl,L,M.expl,mat,p.col,t);
+  });
+}
+
+// Draw laser on 2D canvas overlay
+function drawLaser(hx){
+  hx.clearRect(0,0,EW(),EH());
+  if(!laserActive)return;
+  const cx=curX*EW(), cy=curY*EH();
+  const grad=hx.createLinearGradient(EW()/2,EH()/2,cx,cy);
+  grad.addColorStop(0,'rgba(51,255,180,.9)');
+  grad.addColorStop(1,'rgba(51,255,180,.1)');
+  hx.beginPath();hx.moveTo(EW()/2,EH()/2);hx.lineTo(cx,cy);
+  hx.strokeStyle=grad;hx.lineWidth=4;hx.shadowBlur=15;hx.shadowColor='#33ffb4';hx.stroke();
+  hx.shadowBlur=0;
+  // Impact glow
+  hx.beginPath();hx.arc(cx,cy,8,0,Math.PI*2);hx.fillStyle='rgba(51,255,180,.6)';hx.fill();
+}
+
+// ═══════════════════════════════════════════════════════
+//  GAME LOOP
+// ═══════════════════════════════════════════════════════
+function gameLoop(t){
+  requestAnimationFrame(gameLoop);
+  const dt=Math.min(t-lastT,50)/1000;lastT=t;animT=t/1000;
+
+  if(!gameActive)return;
+
+  // Update enemies
+  enemies.forEach(e=>{
+    if(e.dead)return;
+    e.x+=e.vx;e.y+=e.vy;e.z+=e.vz;e.ry+=.03;
+    e.vy=Math.sin(animT*1.5+e.x)*.015;
+    // Enemy shoots
+    e.shootTimer--;
+    if(e.shootTimer<=0){enemyShoot(e);e.shootTimer=80+Math.random()*100-wave*5;}
+    // If reaches player
+    if(e.z>1){
+      e.dead=true;
+      if(!shieldActive){hp-=2;updateHUD();if(hp<=0){gameOver();return;}}
+      const df=document.getElementById('dmgflash');df.style.opacity='1';setTimeout(()=>df.style.opacity='0',300);
+    }
+  });
+
+  // Update bullets
+  bullets.forEach(b=>{if(!b.dead){b.x+=b.vx;b.y+=b.vy;b.z+=b.vz;b.life--;if(b.life<=0)b.dead=true;}});
+  enemyBullets.forEach(b=>{if(!b.dead){b.x+=b.vx;b.y+=b.vy;b.z+=b.vz;b.life--;if(b.life<=0)b.dead=true;}});
+
+  // Update particles
+  particles3d.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.life--;});
+
+  // Shield timer
+  if(shieldActive){shieldTimer--;if(shieldTimer<=0)shieldActive=false;}
+
+  // Clean up
+  enemies=enemies.filter(e=>!e.dead||(animT-e.deathT)<.5);
+  bullets=bullets.filter(b=>!b.dead);
+  enemyBullets=enemyBullets.filter(b=>!b.dead);
+  particles3d=particles3d.filter(p=>p.life>0);
+
+  // Hit detection
+  checkBulletHits();
+  checkEnemyBulletHits();
+
+  // Next wave
+  if(enemies.length===0&&waveCooldown<=0){
+    wave++;
+    waveCooldown=180;
+    setTimeout(spawnWave,1500);
+  }
+  if(waveCooldown>0)waveCooldown--;
+
+  // Render both eyes
+  renderEye(glL,LL,MESHES.L);
+  renderEye(glR,LR,MESHES.R);
+
+  // Draw laser on 2D skeleton canvases
+  drawLaser(hxL);
+  drawLaser(hxR);
+
+  // FPS
+  fc++;
+  if(animT-fpt>1){fpt=animT;fc=0;}
+}
+
+// ═══════════════════════════════════════════════════════
+//  HUD
+// ═══════════════════════════════════════════════════════
+function updateHUD(){
+  document.getElementById('scoreL').textContent=score;
+  document.getElementById('scoreR').textContent=`ХВИЛЯ ${wave}`;
+  // HP hearts
+  ['hpL','hpR'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.innerHTML='';
+    for(let i=0;i<5;i++){const d=document.createElement('div');d.className='hp'+(i>=hp?' dead':'');el.appendChild(d);}
+  });
+}
+
+function showWaveAnnounce(txt){
+  const el=document.getElementById('waveannounce');
+  el.textContent=txt;el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0',2000);
+}
+
+function gameOver(){
+  gameActive=false;
+  document.getElementById('gameover').style.display='flex';
+  document.getElementById('goKills').textContent=kills;
+  document.getElementById('goWave').textContent=wave;
+  document.getElementById('goScore').textContent=score;
+}
+
+function restartGame(){
+  score=0;wave=1;hp=5;kills=0;
+  enemies=[];bullets=[];enemyBullets=[];particles3d=[];lasers=[];
+  shieldActive=false;waveCooldown=0;shootCD=0;
+  document.getElementById('gameover').style.display='none';
+  updateHUD();
+  gameActive=true;
+  spawnWave();
+}
+
+// ═══════════════════════════════════════════════════════
+//  MEDIAPIPE
+// ═══════════════════════════════════════════════════════
+let mpH,mpCam;
+
+async function startGame(){
+  document.getElementById('boot').style.display='none';
+  document.getElementById('load').style.display='flex';
+  setBar(10);
+
+  // Setup video for both eyes
+  let stream;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:640},height:{ideal:480}},audio:false});
+  }catch(e){
+    try{stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}
+    catch(e2){alert('❌ Потрібна камера!\n\nHTTPS або localhost.\n\n'+e2.message);document.getElementById('load').style.display='none';document.getElementById('boot').style.display='flex';return;}
+  }
+
+  // Assign stream to both eye videos
+  document.querySelectorAll('#vr video').forEach(v=>{v.srcObject=stream;});
+  await new Promise(r=>{document.querySelector('#eyeL video').onloadedmetadata=r;});
+  document.querySelectorAll('#vr video').forEach(v=>v.play());
+
+  setBar(45);document.getElementById('lmsg').textContent='ЗАВАНТАЖЕННЯ AI...';
+
+  mpH=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  mpH.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.75,minTrackingConfidence:.7});
+  mpH.onResults(onHandResults);
+  setBar(75);document.getElementById('lmsg').textContent='ЗАПУСК...';
+
+  mpCam=new Camera(document.querySelector('#eyeL video'),{
+    onFrame:async()=>{await mpH.send({image:document.querySelector('#eyeL video')});},
+    width:640,height:480
+  });
+  await mpCam.start();
+  setBar(100);
+
+  setTimeout(()=>{
+    document.getElementById('load').style.display='none';
+    document.getElementById('vr').style.display='flex';
+    document.getElementById('score-bar').style.display='flex';
+    document.getElementById('healthbar').style.display='flex';
+    document.getElementById('gestbar').style.display='flex';
+    // size canvases
+    [c3L,c3R].forEach(c=>{c.width=EW();c.height=EH();});
+    sizeHandCanvas();
+    updateHUD();
+    gameActive=true;
+    spawnWave();
+    requestAnimationFrame(gameLoop);
+  },600);
+}
+
+function setBar(v){document.getElementById('bp').style.width=v+'%';}
+
+function onHandResults(res){
+  hxL.clearRect(0,0,EW(),EH());
+  hxR.clearRect(0,0,EW(),EH());
+
+  if(!res.multiHandLandmarks||!res.multiHandLandmarks.length){
+    handWarmup=0;
+    laserActive=false;
+    document.getElementById('gestL').textContent='◈ ПОКАЖИ РУКУ';
+    document.getElementById('gestR').textContent='◈ ПОКАЖИ РУКУ';
+    return;
+  }
+
+  const lm=res.multiHandLandmarks[0];
+  const g=getGest(lm);
+  drawSkeleton(hxL,lm,g);
+  drawSkeleton(hxR,lm,g);
+  handleGest(g,lm);
+}
+</script>
+</body>
+</html>
